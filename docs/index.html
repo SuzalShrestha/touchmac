@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TouchMac — Desk taps become shortcuts</title>
+  <meta name="description" content="TouchMac turns the desk around your Apple Silicon MacBook into six tap zones. No extra hardware. Open source." />
+  <meta name="theme-color" content="#0a0b0f" />
+  <meta property="og:title" content="TouchMac" />
+  <meta property="og:description" content="Tap the table beside your MacBook — the desk becomes shortcut buttons." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://suzalshrestha.github.io/touchmac/" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0b0f'/%3E%3Cpath d='M8 18c2-6 6-8 8-8s6 2 8 8' stroke='%237dd3fc' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='22' r='2' fill='%23a78bfa'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="glow glow-a" aria-hidden="true"></div>
+  <div class="glow glow-b" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="#">
+      <span class="brand-mark" aria-hidden="true"></span>
+      TouchMac
+    </a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#zones">Zones</a>
+      <a href="#install">Install</a>
+      <a class="nav-gh" href="https://github.com/SuzalShrestha/touchmac" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Open source · Apple Silicon · macOS 14+</p>
+      <h1>Tap the desk.<br /><span class="grad">Run the shortcut.</span></h1>
+      <p class="lede">
+        TouchMac turns empty desk space around your MacBook into six configurable
+        tap zones — open apps, screenshot, volume, media, or any shell command.
+        No dongles. No trackpad hacks. Just the sensors already in the chassis.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" id="download-btn" href="https://github.com/SuzalShrestha/touchmac/releases/latest">
+          Download for Mac
+          <span class="btn-meta" id="download-meta">v0.1.0 · .zip</span>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/SuzalShrestha/touchmac">
+          View source
+        </a>
+      </div>
+      <p class="fine">
+        Free · MIT License · Requires Apple Silicon MacBook with SPU IMU
+      </p>
+    </section>
+
+    <section class="demo" aria-label="Zone layout">
+      <div class="desk">
+        <div class="zone z-lf" data-label="Left Far">LF</div>
+        <div class="zone z-ln" data-label="Left Near">LN</div>
+        <div class="laptop">
+          <div class="laptop-lid">
+            <div class="laptop-screen">
+              <div class="pulse" id="pulse"></div>
+              <span class="laptop-title">MacBook</span>
+            </div>
+          </div>
+          <div class="laptop-base"></div>
+        </div>
+        <div class="zone z-rn" data-label="Right Near">RN</div>
+        <div class="zone z-rf" data-label="Right Far">RF</div>
+        <div class="zone z-fl" data-label="Front Left">FL</div>
+        <div class="zone z-fr" data-label="Front Right">FR</div>
+      </div>
+      <p class="demo-caption">Six zones around the chassis — each learns its vibration signature when you calibrate.</p>
+    </section>
+
+    <section id="how" class="section">
+      <div class="section-head">
+        <h2>How it works</h2>
+        <p>Apple Silicon MacBooks hide a Bosch IMU on the Sensor Processing Unit. A desk tap shakes the chassis; TouchMac classifies which side got hit.</p>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <div class="card-num">01</div>
+          <h3>Sense</h3>
+          <p><code>touchmacd</code> opens the root-only HID devices and streams accel + gyro samples over localhost UDP at ~800&nbsp;Hz.</p>
+        </article>
+        <article class="card">
+          <div class="card-num">02</div>
+          <h3>Detect</h3>
+          <p>Onset detection watches dynamic acceleration. A short window builds a 7-dimensional vibration feature for each tap.</p>
+        </article>
+        <article class="card">
+          <div class="card-num">03</div>
+          <h3>Match</h3>
+          <p>k-NN against your calibration taps maps the signature to a zone — or rejects the hit if it’s too ambiguous.</p>
+        </article>
+        <article class="card">
+          <div class="card-num">04</div>
+          <h3>Act</h3>
+          <p>Actions run in the user app: open apps, screenshot, volume, play/pause, or any shell command you assign.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="zones" class="section section-alt">
+      <div class="section-head">
+        <h2>What you can assign</h2>
+        <p>Every zone is a programmable button. Calibrate once, tap forever.</p>
+      </div>
+      <ul class="action-grid">
+        <li><span class="dot"></span> Open any app</li>
+        <li><span class="dot"></span> Screenshot to clipboard</li>
+        <li><span class="dot"></span> Volume up / down / mute</li>
+        <li><span class="dot"></span> Play / Pause media</li>
+        <li><span class="dot"></span> Run a shell command</li>
+        <li><span class="dot"></span> Test mode (flash only)</li>
+      </ul>
+    </section>
+
+    <section id="install" class="section">
+      <div class="section-head">
+        <h2>Install</h2>
+        <p>Two paths: grab the release binary, or build in under a minute with SwiftPM.</p>
+      </div>
+
+      <div class="install-grid">
+        <div class="install-card">
+          <h3>Binary release</h3>
+          <ol>
+            <li>Download the latest <code>.zip</code> from GitHub Releases.</li>
+            <li>Unzip, then clear Gatekeeper quarantine:
+              <pre><code>xattr -cr ~/Downloads/TouchMac.app</code></pre>
+            </li>
+            <li>Open the app → <strong>Start Sensor</strong> (admin password once per boot).</li>
+            <li>Assign actions, calibrate each zone (~10 taps), then go live.</li>
+          </ol>
+          <a class="btn btn-primary btn-sm" href="https://github.com/SuzalShrestha/touchmac/releases/latest">Get the release</a>
+        </div>
+        <div class="install-card">
+          <h3>Build from source</h3>
+          <pre class="block"><code>git clone https://github.com/SuzalShrestha/touchmac.git
+cd touchmac/app
+sh make_app.sh
+open build/TouchMac.app</code></pre>
+          <p class="note">Needs Xcode Command Line Tools. Full Xcode not required.</p>
+        </div>
+      </div>
+
+      <div class="compat">
+        <h3>Will it work on my Mac?</h3>
+        <pre class="block"><code>ioreg -c AppleSPUHIDDevice -r -d1 | grep -c PrimaryUsage</code></pre>
+        <p>Non-zero means the SPU IMU is exposed. Intel Macs and some base M1 models don’t have it.</p>
+      </div>
+    </section>
+
+    <section class="section section-cta">
+      <h2>Ship desk taps to your workflow</h2>
+      <p>MIT licensed. Fork it, improve zone separation, add launchd — PRs welcome.</p>
+      <div class="cta-row center">
+        <a class="btn btn-primary" href="https://github.com/SuzalShrestha/touchmac/releases/latest">Download TouchMac</a>
+        <a class="btn btn-ghost" href="https://github.com/SuzalShrestha/touchmac">Star on GitHub</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>
+      <strong>TouchMac</strong>
+      <span class="sep">·</span>
+      MIT License
+      <span class="sep">·</span>
+      by <a href="https://github.com/SuzalShrestha">Sujal Shrestha</a>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/SuzalShrestha/touchmac">Source</a>
+      <a href="https://github.com/SuzalShrestha/touchmac/blob/main/LICENSE">License</a>
+      <a href="https://github.com/SuzalShrestha/touchmac/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/SuzalShrestha/touchmac/releases">Releases</a>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

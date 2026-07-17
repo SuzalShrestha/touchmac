@@ -1,6 +1,13 @@
 # TouchMac
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/SuzalShrestha/touchmac?include_prereleases)](https://github.com/SuzalShrestha/touchmac/releases)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](https://github.com/SuzalShrestha/touchmac)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-lightgrey)](https://github.com/SuzalShrestha/touchmac)
+
 **Tap the table beside your MacBook — the desk becomes shortcut buttons.**
+
+Website: **[suzalshrestha.github.io/touchmac](https://suzalshrestha.github.io/touchmac/)**
 
 TouchMac turns the empty desk space around your MacBook into six configurable
 tap zones: two on the left, two on the right, two in front. Tap a spot on the
@@ -23,6 +30,18 @@ different vibration signature.
 
 ---
 
+## Download
+
+**[Get TouchMac v0.1.0 →](https://github.com/SuzalShrestha/touchmac/releases/latest)**
+
+Or build from source (below). The release binary is ad-hoc signed — after
+unzipping, clear quarantine once:
+
+```sh
+xattr -cr ~/Downloads/TouchMac.app
+open ~/Downloads/TouchMac.app
+```
+
 ## Requirements
 
 - Apple Silicon MacBook (tested on M1 Pro MacBook Pro; the sensor is present
@@ -30,13 +49,14 @@ different vibration signature.
   [Troubleshooting](#troubleshooting))
 - macOS 14+
 - Xcode Command Line Tools (`xcode-select --install`) — full Xcode not needed
+  if you only use the prebuilt release
 - Admin password (the sensor's HID device is root-only; see
   [How it works](#how-it-works))
 
-## Quick start
+## Quick start (from source)
 
 ```sh
-git clone <this repo>
+git clone https://github.com/SuzalShrestha/touchmac.git
 cd touchmac/app
 sh make_app.sh              # builds app/build/TouchMac.app (SwiftPM, release)
 open build/TouchMac.app
@@ -162,6 +182,7 @@ touchmac/
 │           ├── ActionRunner.swift#   executes assigned actions
 │           └── Views/            #   MainView, ZonePadView, ZoneEditorView,
 │                                 #   CalibrationOverlay
+├── docs/                         # product website (GitHub Pages)
 ├── touchmac.py                   # earlier Python CLI prototype (macimu-based,
 ├── test_touchmac.py              #   2 zones × 1/2/3-tap counting) + its tests
 └── README.md
@@ -208,6 +229,15 @@ padded surfaces.
 **Nothing detected at all** — lower `thresholdG`, confirm the green status
 pill, and check zones are calibrated (orange "Calibrate" badge = not yet).
 
+**"App is damaged" / can't open the download** — Gatekeeper blocks ad-hoc
+signed apps from the internet. Run:
+
+```sh
+xattr -cr /path/to/TouchMac.app
+```
+
+Then open again (or right-click → Open).
+
 ## Known limitations
 
 - Prototype-grade zone separation: left/right/front split reliably by
@@ -215,12 +245,20 @@ pill, and check zones are calibrated (orange "Calibrate" badge = not yet).
   noisier. Six zones is the honest experimental maximum, not a guarantee.
 - Helper must be restarted after reboot (one password prompt per boot). No
   launchd auto-start yet.
-- The `.app` is ad-hoc signed — fine for local use, not distributable.
+- The `.app` is ad-hoc signed — fine for local use and OSS distribution with
+  the `xattr` step above; not notarized for App Store–style installs.
 - Media key (Play/Pause) uses a synthesized system event; some macOS versions
   gate this behind Accessibility permissions.
 
-## License / credits
+## Contributing
 
-Prototype by Sujal Shrestha. Sensor reverse-engineering credit to
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Prototype by [Sujal Shrestha](https://github.com/SuzalShrestha). Sensor
+reverse-engineering credit to
 [Olivier Bourbonnais](https://github.com/olvvier/apple-silicon-accelerometer)
 (macimu) — the helper's report parsing follows his documented format.
