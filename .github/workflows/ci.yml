@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Engine self-test (debug)
+        run: swift run selftest
+      - name: Engine self-test (release, checks stay on)
+        run: swift run -c release selftest
+      - name: Build app bundle
+        run: sh make_app.sh
+      - name: Python prototype tests
+        working-directory: .
+        run: python3 test_touchmac.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TouchMac.app
+          path: app/build/TouchMac.app

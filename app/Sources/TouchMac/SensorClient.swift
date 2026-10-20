@@ -1,60 +1,100 @@
 import Foundation
+import IOKit
+import TouchMacCore
 
-/// Listens on UDP 127.0.0.1:48291 for touchmacd sample datagrams:
-/// [1 byte kind: 0=accel 1=gyro][3 x Float32 LE x/y/z]
+/// Connects to touchmacd's Unix socket (format: SensorWire) and feeds samples to the callbacks.
+/// The connection is accepted only if the peer is root: the socket sits in /var/run, which
+/// only root can write, so nobody else can pose as the helper and inject fake taps.
+/// Callbacks run on `queue`; touch the engine only from there.
 final class SensorClient {
     var onAccel: ((Double, Double, Double, Double) -> Void)?  // t, x, y, z
     var onGyro: ((Double, Double, Double, Double) -> Void)?
-    private(set) var lastPacketAt: Date?
+    let queue = DispatchQueue(label: "touchmac.sensor", qos: .userInteractive)
 
-    private let queue = DispatchQueue(label: "touchmac.sensor")
-    private var sock: Int32 = -1
+    // all below: `queue` only
+    private var fd: Int32 = -1
     private var source: DispatchSourceRead?
+    private var carry: [UInt8] = []   // bytes of a record split across reads
+    private var lastPacket = 0.0      // systemUptime
 
-    func start() {
-        sock = socket(AF_INET, SOCK_DGRAM, 0)
-        guard sock >= 0 else { return }
-        var yes: Int32 = 1
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = UInt16(48291).bigEndian
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
-        let bound = withUnsafePointer(to: &addr) { p in
-            p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
-                bind(sock, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
+    /// Connects if not connected. Cheap; call about once a second.
+    func connectIfNeeded() {
+        queue.async { [self] in
+            guard fd < 0 else { return }
+            let s = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard s >= 0 else { return }
+            var addr = sockaddr_un()
+            addr.sun_family = sa_family_t(AF_UNIX)
+            withUnsafeMutableBytes(of: &addr.sun_path) { dst in
+                SensorWire.socketPath.utf8CString.withUnsafeBytes {
+                    dst.copyMemory(from: UnsafeRawBufferPointer(rebasing: $0.prefix(dst.count - 1)))
+                }
             }
+            let ok = withUnsafePointer(to: &addr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(s, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+            } == 0
+            var uid: uid_t = 1, gid: gid_t = 0
+            guard ok, getpeereid(s, &uid, &gid) == 0, uid == 0 else {
+                close(s)
+                return
+            }
+            var one: Int32 = 1
+            setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
+            _ = fcntl(s, F_SETFL, O_NONBLOCK)
+            fd = s
+            carry = []
+            let src = DispatchSource.makeReadSource(fileDescriptor: s, queue: queue)
+            src.setEventHandler { [weak self] in self?.drain() }
+            src.setCancelHandler { close(s) }
+            src.resume()
+            source = src
         }
-        guard bound == 0 else {
-            close(sock)
-            sock = -1
-            return
-        }
-        let src = DispatchSource.makeReadSource(fileDescriptor: sock, queue: queue)
-        src.setEventHandler { [weak self] in self?.drain() }
-        src.resume()
-        source = src
     }
 
     private func drain() {
-        var buf = [UInt8](repeating: 0, count: 64)
+        var buf = [UInt8](repeating: 0, count: 8192)
         while true {
-            let n = recv(sock, &buf, buf.count, MSG_DONTWAIT)
-            guard n >= 13 else { break }
-            let t = ProcessInfo.processInfo.systemUptime
-            lastPacketAt = Date()
-            func f(_ off: Int) -> Double {
-                var bits: UInt32 = 0
-                memcpy(&bits, Array(buf[off..<off + 4]), 4)
-                return Double(Float32(bitPattern: UInt32(littleEndian: bits)))
+            let n = recv(fd, &buf, buf.count, 0)
+            if n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR) { return disconnect() }
+            guard n > 0 else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            lastPacket = now
+            let bytes = carry + buf[0..<n]
+            let whole = bytes.count - bytes.count % SensorWire.recordLen
+            bytes.withUnsafeBytes { raw in
+                SensorWire.decode(raw, count: whole, now: now) { kind, t, x, y, z in
+                    if kind == 0 { onAccel?(t, x, y, z) } else { onGyro?(t, x, y, z) }
+                }
             }
-            let x = f(1), y = f(5), z = f(9)
-            if buf[0] == 0 { onAccel?(t, x, y, z) } else { onGyro?(t, x, y, z) }
+            carry = Array(bytes[whole...])
         }
     }
 
-    var isAlive: Bool {
-        guard let last = lastPacketAt else { return false }
-        return Date().timeIntervalSince(last) < 1.5
+    private func disconnect() {
+        source?.cancel()  // cancel handler closes the fd
+        source = nil
+        fd = -1
     }
+
+    var isAlive: Bool {
+        queue.sync { lastPacket > 0 && ProcessInfo.processInfo.systemUptime - lastPacket < 1.5 }
+    }
+
+    /// True when this Mac exposes the SPU accelerometer. Reading the registry needs no root.
+    static let hardwarePresent: Bool = {
+        var it: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("AppleSPUHIDDevice"), &it) == KERN_SUCCESS
+        else { return false }
+        defer { IOObjectRelease(it) }
+        var found = false
+        while case let svc = IOIteratorNext(it), svc != 0 {
+            let page = IORegistryEntryCreateCFProperty(svc, "PrimaryUsagePage" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? Int
+            let usage = IORegistryEntryCreateCFProperty(svc, "PrimaryUsage" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? Int
+            if page == 0xFF00 && usage == 3 { found = true }
+            IOObjectRelease(svc)
+        }
+        return found
+    }()
 }

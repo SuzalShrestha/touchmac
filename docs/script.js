@@ -22,8 +22,9 @@
     i += 1;
   }
 
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   cycle();
-  timer = setInterval(cycle, 1600);
+  if (!reduced) timer = setInterval(cycle, 1600);
 
   zones.forEach((zone, idx) => {
     zone.addEventListener("mouseenter", () => {
@@ -33,7 +34,7 @@
     });
     zone.addEventListener("mouseleave", () => {
       clearInterval(timer);
-      timer = setInterval(cycle, 1600);
+      if (!reduced) timer = setInterval(cycle, 1600);
     });
   });
 

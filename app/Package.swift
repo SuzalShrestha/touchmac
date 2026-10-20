@@ -8,7 +8,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "TouchMacCore", swiftSettings: lang),
-        .executableTarget(name: "touchmacd", swiftSettings: lang),
+        .executableTarget(name: "touchmacd", dependencies: ["TouchMacCore"], swiftSettings: lang),
         .executableTarget(name: "TouchMac", dependencies: ["TouchMacCore"], swiftSettings: lang),
         .executableTarget(name: "selftest", dependencies: ["TouchMacCore"], swiftSettings: lang),
     ]
