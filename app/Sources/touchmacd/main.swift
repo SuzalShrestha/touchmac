@@ -13,7 +13,8 @@
 // Security: the socket lives in /var/run, where only root can create it, so the
 // app knows it talks to this helper (it also checks our uid is 0). We stream only
 // to the console user (or root), checked with getpeereid: other accounts and
-// processes cannot read the motion data, which can leak keystrokes.
+// processes cannot read the motion data, which can leak keystrokes. The check runs
+// again every second, so a fast user switch cuts off the previous user's client.
 
 import Foundation
 import IOKit
@@ -56,7 +57,8 @@ guard listenFD >= 0, bound == 0, listen(listenFD, 4) == 0 else {
 }
 chmod(SensorWire.socketPath, 0o666)  // anyone may knock; the uid check below decides
 
-var clients: [Int32] = []
+var clients: [(fd: Int32, uid: uid_t)] = []
+var lastRefusedUID: uid_t?  // log each refused uid once, not every reconnect
 var lastReport = CFAbsoluteTimeGetCurrent()
 
 func consoleUID() -> uid_t? {
@@ -64,13 +66,26 @@ func consoleUID() -> uid_t? {
     return stat("/dev/console", &st) == 0 ? st.st_uid : nil
 }
 
+func mayRead(_ uid: uid_t) -> Bool { uid == 0 || uid == consoleUID() }
+
+/// Fast user switching changes the console owner; a client accepted for the old user must not keep reading.
+func dropStaleClients() {
+    clients.removeAll { c in
+        guard !mayRead(c.uid) else { return false }
+        log("dropped client uid \(c.uid): no longer the console user")
+        close(c.fd)
+        return true
+    }
+}
+
 let acceptSource = DispatchSource.makeReadSource(fileDescriptor: listenFD, queue: .main)
 acceptSource.setEventHandler {
     let fd = accept(listenFD, nil, nil)
     guard fd >= 0 else { return }
     var uid: uid_t = 0, gid: gid_t = 0
-    guard getpeereid(fd, &uid, &gid) == 0, uid == 0 || uid == consoleUID() else {
-        log("refused a client with uid \(uid) (not the console user)")
+    guard getpeereid(fd, &uid, &gid) == 0, mayRead(uid) else {
+        if lastRefusedUID != uid { log("refused a client with uid \(uid) (not the console user)") }
+        lastRefusedUID = uid
         close(fd)
         return
     }
@@ -78,7 +93,7 @@ acceptSource.setEventHandler {
     setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &big, socklen_t(MemoryLayout<Int32>.size))
     _ = fcntl(fd, F_SETFL, O_NONBLOCK)
     if clients.isEmpty { wakeSPU() }
-    clients.append(fd)
+    clients.append((fd, uid))
 }
 acceptSource.resume()
 
@@ -107,10 +122,10 @@ func flush(_ now: Double) {
         for i in 0..<batchCount { SensorWire.stampAge(now - batchTimes[i], into: raw, at: i * recordLen) }
     }
     let len = batchCount * recordLen
-    clients.removeAll { fd in
-        let n = batch.withUnsafeBytes { Darwin.send(fd, $0.baseAddress, len, 0) }
+    clients.removeAll { c in
+        let n = batch.withUnsafeBytes { Darwin.send(c.fd, $0.baseAddress, len, 0) }
         if n == len || (n < 0 && errno == EAGAIN) { return false }  // sent, or dropped whole: stream stays aligned
-        close(fd)  // gone, or a partial write that would misalign records: the app reconnects
+        close(c.fd)  // gone, or a partial write that would misalign records: the app reconnects
         return true
     }
     batchCount = 0
@@ -209,8 +224,10 @@ if result.opened == 0 {
 }
 log("streaming \(result.opened) sensors to \(SensorWire.socketPath) while the app is connected")
 
-// ---- once a second: stall watchdog ----
+// ---- once a second: console-user check, stall watchdog ----
 let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + 1, 1, 0, 0) { _ in
+    // ponytail: up to 1 s of samples can reach the old user after a switch; watch SCDynamicStore ConsoleUser if that matters
+    dropStaleClients()
     let now = CFAbsoluteTimeGetCurrent()
     // ponytail: exit-and-restart is the whole sleep/stall recovery; add IOPM wake hooks if restarts prove slow
     if now - lastReport > stallSec {

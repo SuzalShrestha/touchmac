@@ -18,7 +18,9 @@ only supported line.
   it, and both ends check each other with `getpeereid`: the app accepts only a
   root peer (no fake taps from other processes, accounts or sandboxed apps),
   and the helper streams only to the console user or root (no motion data,
-  which can leak keystrokes, to anyone else). v0.1.0 used unauthenticated UDP
+  which can leak keystrokes, to anyone else). The helper checks the console
+  user again every second, so a fast user switch cuts off the previous user
+  within about 1 s. v0.1.0 used unauthenticated UDP
   on 127.0.0.1:48291; any local process could inject samples or read them.
 - **Install location.** Since v0.2.0 the helper is installed once, with an
   admin prompt, to `/Library/PrivilegedHelperTools/com.sujal.touchmacd`
