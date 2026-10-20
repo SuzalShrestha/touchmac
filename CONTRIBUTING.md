@@ -41,7 +41,7 @@ Open an issue before large architecture changes.
 | Path | Role |
 |------|------|
 | `app/Sources/TouchMacCore/` | Platform-free tap engine, classifier, gestures, config model |
-| `app/Sources/touchmacd/` | Root helper (LaunchDaemon): HID → UDP, watchdog |
+| `app/Sources/touchmacd/` | Root helper (LaunchDaemon): HID → Unix socket, watchdog |
 | `app/Sources/TouchMac/` | SwiftUI app, helper installer, actions |
 | `app/Sources/selftest/` | Synthetic + real-tap checks |
 | `touchmac.py` | Earlier Python CLI prototype |

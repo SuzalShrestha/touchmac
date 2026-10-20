@@ -202,10 +202,10 @@ run("sensor_wire") {
               "round trip mismatch: \(s) vs \(g)")
     }
     check(got[0].1 < got[1].1 && got[1].1 < got[2].1, "older samples must get earlier times")
-    // v0.1 helper: one 13-byte record, stamped with the receive time
-    var legacy: [(UInt8, Double)] = []
-    Array(buf.prefix(13)).withUnsafeBytes { SensorWire.decode($0, count: 13, now: 7) { k, t, _, _, _ in legacy.append((k, t)) } }
-    check(legacy.count == 1 && legacy[0].0 == 0 && legacy[0].1 == 7, "legacy packet: \(legacy)")
+    // a stream read can end mid-record: only whole records are decoded
+    var partial = 0
+    buf.withUnsafeBytes { SensorWire.decode($0, count: SensorWire.recordLen + 9, now: 0) { _, _, _, _, _ in partial += 1 } }
+    check(partial == 1, "half a record must not be decoded: \(partial)")
 }
 
 print("all pass")

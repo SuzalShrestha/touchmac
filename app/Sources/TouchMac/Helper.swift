@@ -1,4 +1,5 @@
 import Foundation
+import TouchMacCore
 
 /// Installs touchmacd as a LaunchDaemon: one admin prompt, then it starts at boot and
 /// launchd restarts it after a crash, sleep or stall. The root binary lives in
@@ -65,7 +66,7 @@ enum Helper {
         runAsAdmin("""
         launchctl bootout system/\(label) 2>/dev/null || true
         pkill -x touchmacd 2>/dev/null || true
-        rm -f \(plistPath) \(installedBinary) /var/run/touchmacd.pid
+        rm -f \(plistPath) \(installedBinary) /var/run/touchmacd.pid \(SensorWire.socketPath)
         """, done: done)
     }
 

@@ -9,13 +9,17 @@ only supported line.
 ## Architecture notes
 
 - **`touchmacd`** runs as root solely to open the Apple SPU HID devices. It
-  only *emits* accelerometer/gyroscope samples over localhost UDP. It never
+  only *emits* accelerometer/gyroscope samples to the app. It never
   runs shell commands or opens apps.
 - **Actions** (open app, shell, media keys, etc.) run inside the user-level
   `TouchMac.app` process under your account.
-- The UDP socket is unauthenticated by design: spoofing samples on localhost
-  cannot grant more privilege than the user already has. The ping port
-  (48292) only tells the helper to keep sending samples.
+- **Sensor channel.** Since v0.2.0 samples travel over a Unix socket at
+  `/var/run/com.sujal.touchmacd.sock`, not localhost UDP. Only root can create
+  it, and both ends check each other with `getpeereid`: the app accepts only a
+  root peer (no fake taps from other processes, accounts or sandboxed apps),
+  and the helper streams only to the console user or root (no motion data,
+  which can leak keystrokes, to anyone else). v0.1.0 used unauthenticated UDP
+  on 127.0.0.1:48291; any local process could inject samples or read them.
 - **Install location.** Since v0.2.0 the helper is installed once, with an
   admin prompt, to `/Library/PrivilegedHelperTools/com.sujal.touchmacd`
   (owner root:wheel, mode 755) and started by launchd from

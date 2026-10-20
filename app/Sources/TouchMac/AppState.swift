@@ -89,8 +89,6 @@ final class AppState {
             DispatchQueue.main.async { self?.handleTap(feature) }
         }
         Self.wire(client, to: engine)
-        client.start()
-        if let error = client.startError { notice = error }
 
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -105,7 +103,7 @@ final class AppState {
     }
 
     private func tick() {
-        client.ping()
+        client.connectIfNeeded()
         sensorAlive = client.isAlive
         if !sensorAlive { helperStatus = Helper.status }
     }

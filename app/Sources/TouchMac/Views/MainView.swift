@@ -330,7 +330,13 @@ struct SensorStatusView: View {
     }
 
     private var subtitle: String {
-        if !state.sensorAlive { return state.helperStatus == .installed ? "Waiting for data" : "Helper not installed" }
+        if !state.sensorAlive {
+            switch state.helperStatus {
+            case .installed: return "Waiting for data"
+            case .outdated: return "Helper needs an update"
+            case .notInstalled: return "Helper not installed"
+            }
+        }
         return state.testMode ? "Actions will not run" : "Tap the desk"
     }
 }

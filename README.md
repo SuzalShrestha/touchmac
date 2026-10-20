@@ -104,21 +104,25 @@ Prior art: the [Knock](https://www.producthunt.com/products/knock-7) app,
 ### Architecture
 
 ```
-┌────────────────────────────────────┐        ┌──────────────────────────────────┐
-│ touchmacd  (root, LaunchDaemon)    │  UDP   │ TouchMac.app (user)              │
+┌────────────────────────────────────┐  Unix  ┌──────────────────────────────────┐
+│ touchmacd  (root, LaunchDaemon)    │ socket │ TouchMac.app (console user)      │
 │                                    │ ─────▶ │                                  │
-│ · wakes SPU drivers                │ :48291 │ SensorClient → TapEngine         │
-│ · opens accel+gyro HID             │        │                   ↓              │
-│ · sends [kind][x][y][z] datagrams  │ ◀───── │  Classifier (k-NN) → TapGrouper  │
-│   only while the app pings         │ :48292 │                   ↓              │
-│ · exits on stall → launchd restart │  ping  │             ActionRunner         │
+│ · wakes SPU drivers                │  /var/ │ SensorClient → TapEngine         │
+│ · opens accel+gyro HID             │  run/  │                   ↓              │
+│ · streams sample batches to the    │        │  Classifier (k-NN) → TapGrouper  │
+│   console user only                │        │                   ↓              │
+│ · exits on stall → launchd restart │        │             ActionRunner         │
 └────────────────────────────────────┘        └──────────────────────────────────┘
 ```
 
 - **`touchmacd`** only *emits* sensor data; it never executes anything.
-  Actions run inside the user-level app, so a local process spoofing
-  datagrams gains nothing it couldn't do by running commands as the user
-  directly — that's why the localhost socket is unauthenticated.
+  Actions run inside the user-level app.
+- **The channel is authenticated both ways.** The helper streams over a Unix
+  socket at `/var/run/com.sujal.touchmacd.sock`. Only root can create files
+  there, and the app also checks with `getpeereid` that the peer is root, so
+  no other process can feed it fake taps. The helper checks the peer too and
+  streams only to the console user (or root): other accounts and apps cannot
+  read the motion data, which could leak what you type.
 - The app installs it once: the binary is copied to
   `/Library/PrivilegedHelperTools/com.sujal.touchmacd` (root-owned) and a
   plist to `/Library/LaunchDaemons/com.sujal.touchmacd.plist`. The root
@@ -126,7 +130,8 @@ Prior art: the [Knock](https://www.producthunt.com/products/knock-7) app,
 - **Sleep and stalls:** if no sensor report arrives for 5 s, the helper exits
   and launchd restarts it, which wakes the SPU again. At boot it retries for
   30 s before deciding the Mac has no sensor.
-- **Energy:** the helper sends only while the app pings it (once a second).
+- **Energy:** the helper sends only while the app is connected, in batches
+  of up to 16 samples (8 ms), so neither process wakes for every sample.
 - Settings → Sensor shows the helper state and has Reinstall, Restart,
   Uninstall and Show Log. The app also detects an outdated helper after an update.
 
@@ -185,7 +190,7 @@ touchmac/
 │       │   ├── Classifier.swift  #   k-NN, leave-one-out quality, outlier pruning
 │       │   ├── TapGrouper.swift  #   single / double tap
 │       │   └── Model.swift       #   config, zones, actions (lenient Codable)
-│       ├── touchmacd/main.swift  # root helper: IOKit HID → UDP, watchdog
+│       ├── touchmacd/main.swift  # root helper: IOKit HID → Unix socket, watchdog
 │       ├── selftest/             # engine/config checks + real-tap fixture
 │       └── TouchMac/             # SwiftUI app
 │           ├── AppState.swift    #   sensor → engine → classifier → gestures → actions
