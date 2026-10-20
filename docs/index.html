@@ -40,13 +40,14 @@
       <h1>Tap the desk.<br /><span class="grad">Run the shortcut.</span></h1>
       <p class="lede">
         TouchMac turns empty desk space around your MacBook into six configurable
-        tap zones — open apps, screenshot, volume, media, or any shell command.
-        No dongles. No trackpad hacks. Just the sensors already in the chassis.
+        tap zones — single or double tap. Open apps and websites, run Shortcuts,
+        control music and volume, or run any shell command. No dongles. Just the
+        motion sensor already in the chassis.
       </p>
       <div class="cta-row">
         <a class="btn btn-primary" id="download-btn" href="https://github.com/SuzalShrestha/touchmac/releases/latest">
           Download for Mac
-          <span class="btn-meta" id="download-meta">v0.1.0 · .zip</span>
+          <span class="btn-meta" id="download-meta">v0.2.0 · .zip</span>
         </a>
         <a class="btn btn-ghost" href="https://github.com/SuzalShrestha/touchmac">
           View source
@@ -75,7 +76,7 @@
         <div class="zone z-fl" data-label="Front Left">FL</div>
         <div class="zone z-fr" data-label="Front Right">FR</div>
       </div>
-      <p class="demo-caption">Six zones around the chassis — each learns its vibration signature when you calibrate.</p>
+      <p class="demo-caption">Six zones around the chassis. Each learns its vibration signature when you calibrate, and TouchMac tells you how well it can tell them apart.</p>
     </section>
 
     <section id="how" class="section">
@@ -87,22 +88,22 @@
         <article class="card">
           <div class="card-num">01</div>
           <h3>Sense</h3>
-          <p><code>touchmacd</code> opens the root-only HID devices and streams accel + gyro samples over localhost UDP at ~800&nbsp;Hz.</p>
+          <p>A small helper, installed once as a system service, reads the root-only sensor and streams it to the app over localhost — only while the app listens.</p>
         </article>
         <article class="card">
           <div class="card-num">02</div>
           <h3>Detect</h3>
-          <p>Onset detection watches dynamic acceleration. A short window builds a 7-dimensional vibration feature for each tap.</p>
+          <p>Onset detection watches dynamic acceleration. The threshold rises in noisy rooms, and taps while you type or click are ignored.</p>
         </article>
         <article class="card">
           <div class="card-num">03</div>
           <h3>Match</h3>
-          <p>k-NN against your calibration taps maps the signature to a zone — or rejects the hit if it’s too ambiguous.</p>
+          <p>k-NN against your calibration taps maps the signature to a zone — or rejects the hit if it is too ambiguous.</p>
         </article>
         <article class="card">
           <div class="card-num">04</div>
           <h3>Act</h3>
-          <p>Actions run in the user app: open apps, screenshot, volume, play/pause, or any shell command you assign.</p>
+          <p>Actions run in the user app, never as root. Errors and missing permissions show up in the activity log.</p>
         </article>
       </div>
     </section>
@@ -110,15 +111,18 @@
     <section id="zones" class="section section-alt">
       <div class="section-head">
         <h2>What you can assign</h2>
-        <p>Every zone is a programmable button. Calibrate once, tap forever.</p>
+        <p>Every zone is two programmable buttons: a single tap and a double tap.</p>
       </div>
       <ul class="action-grid">
-        <li><span class="dot"></span> Open any app</li>
+        <li><span class="dot"></span> Open any app or website</li>
+        <li><span class="dot"></span> Run a Shortcuts shortcut</li>
         <li><span class="dot"></span> Screenshot to clipboard</li>
         <li><span class="dot"></span> Volume up / down / mute</li>
-        <li><span class="dot"></span> Play / Pause media</li>
-        <li><span class="dot"></span> Run a shell command</li>
+        <li><span class="dot"></span> Play / Pause, next, previous</li>
+        <li><span class="dot"></span> Mission Control, sleep display</li>
+        <li><span class="dot"></span> Any shell command</li>
         <li><span class="dot"></span> Test mode (flash only)</li>
+        <li><span class="dot"></span> Calibration accuracy score</li>
       </ul>
     </section>
 
@@ -136,8 +140,8 @@
             <li>Unzip, then clear Gatekeeper quarantine:
               <pre><code>xattr -cr ~/Downloads/TouchMac.app</code></pre>
             </li>
-            <li>Open the app → <strong>Start Sensor</strong> (admin password once per boot).</li>
-            <li>Assign actions, calibrate each zone (~10 taps), then go live.</li>
+            <li>Open the app. The welcome guide installs the sensor helper (admin password once — it then starts with your Mac).</li>
+            <li>Calibrate the six zones (~10 taps each), assign actions, tap the desk.</li>
           </ol>
           <a class="btn btn-primary btn-sm" href="https://github.com/SuzalShrestha/touchmac/releases/latest">Get the release</a>
         </div>
@@ -154,13 +158,13 @@ open build/TouchMac.app</code></pre>
       <div class="compat">
         <h3>Will it work on my Mac?</h3>
         <pre class="block"><code>ioreg -c AppleSPUHIDDevice -r -d1 | grep -c PrimaryUsage</code></pre>
-        <p>Non-zero means the SPU IMU is exposed. Intel Macs and some base M1 models don’t have it.</p>
+        <p>Non-zero means the SPU IMU is exposed. The app also checks this on first launch. Intel Macs and some base M1 models do not have it.</p>
       </div>
     </section>
 
     <section class="section section-cta">
       <h2>Ship desk taps to your workflow</h2>
-      <p>MIT licensed. Fork it, improve zone separation, add launchd — PRs welcome.</p>
+      <p>MIT licensed. Fork it, improve zone separation, add actions — PRs welcome.</p>
       <div class="cta-row center">
         <a class="btn btn-primary" href="https://github.com/SuzalShrestha/touchmac/releases/latest">Download TouchMac</a>
         <a class="btn btn-ghost" href="https://github.com/SuzalShrestha/touchmac">Star on GitHub</a>

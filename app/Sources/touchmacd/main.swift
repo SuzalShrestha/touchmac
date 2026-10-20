@@ -1,6 +1,10 @@
 // touchmacd — root helper. Wakes the Apple SPU sensor drivers, opens the hidden
-// accelerometer + gyroscope HID devices, and streams samples as tiny UDP
-// datagrams to the TouchMac app on 127.0.0.1:48291.
+// accelerometer + gyroscope HID devices, and streams samples in small UDP
+// batches to the TouchMac app on 127.0.0.1:48291.
+//
+// Runs as a LaunchDaemon (installed by the app). launchd keeps one instance
+// alive; this process exits on purpose when the stream stalls (after sleep,
+// a driver reset) so launchd restarts it and the SPU is woken again.
 //
 // Report format (reverse-engineered, same as macimu): 22-byte input reports,
 // x/y/z int32 little-endian at offsets 6/10/14, Q16 fixed point (divide by
@@ -13,6 +17,7 @@
 import Foundation
 import IOKit
 import IOKit.hid
+import TouchMacCore
 
 let vendorPage = 0xFF00
 let usageAccel = 3
@@ -20,45 +25,76 @@ let usageGyro = 9
 let reportLen = 22
 let dataOffset = 6
 let scale = 65536.0
-let port: UInt16 = 48291
-let pidFile = "/var/run/touchmacd.pid"
+let dataPort: UInt16 = 48291
+let pingPort: UInt16 = 48292     // the app pings once a second while it listens
+let stallSec = 5.0               // no reports this long: exit, launchd restarts us
+let listenerTimeoutSec = 3.0     // no ping this long: stop sending
 
-// ---- single instance guard ----
-if let existing = try? String(contentsOfFile: pidFile, encoding: .utf8),
-   let pid = Int32(existing.trimmingCharacters(in: .whitespacesAndNewlines)),
-   kill(pid, 0) == 0 {
-    FileHandle.standardError.write("touchmacd already running (pid \(pid))\n".data(using: .utf8)!)
-    exit(0)
+func log(_ s: String) {
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    FileHandle.standardError.write("\(stamp) touchmacd: \(s)\n".data(using: .utf8)!)
 }
-try? "\(getpid())".write(toFile: pidFile, atomically: true, encoding: .utf8)
 
 guard geteuid() == 0 else {
-    FileHandle.standardError.write("touchmacd: needs root (SPU HID device is privileged)\n".data(using: .utf8)!)
+    log("needs root (SPU HID device is privileged)")
     exit(1)
 }
 
-// ---- UDP sender ----
+// ---- sockets ----
+func loopback(_ port: UInt16) -> sockaddr_in {
+    var a = sockaddr_in()
+    a.sin_family = sa_family_t(AF_INET)
+    a.sin_port = port.bigEndian
+    a.sin_addr.s_addr = inet_addr("127.0.0.1")
+    return a
+}
+
 let sock = socket(AF_INET, SOCK_DGRAM, 0)
-var dest = sockaddr_in()
-dest.sin_family = sa_family_t(AF_INET)
-dest.sin_port = port.bigEndian
-dest.sin_addr.s_addr = inet_addr("127.0.0.1")
+var dest = loopback(dataPort)
+
+let pingSock = socket(AF_INET, SOCK_DGRAM, 0)
+var pingAddr = loopback(pingPort)
+_ = withUnsafePointer(to: &pingAddr) {
+    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        bind(pingSock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+    }
+}
+_ = fcntl(pingSock, F_SETFL, O_NONBLOCK)
+
+var listening = false
+var lastPing = 0.0
+var lastReport = CFAbsoluteTimeGetCurrent()
+
+// Samples go out in batches (one datagram per ≤16 records or 8 ms) so neither process
+// wakes ~1600 times a second. Format: TouchMacCore/SensorWire.swift.
+let recordLen = SensorWire.recordLen
+let batchMax = 16
+let batchAgeSec = 0.008
+var batch = [UInt8](repeating: 0, count: recordLen * batchMax)
+var batchTimes = [Double](repeating: 0, count: batchMax)
+var batchCount = 0
 
 func send(kind: UInt8, x: Double, y: Double, z: Double) {
-    var pkt = [UInt8](repeating: 0, count: 13)
-    pkt[0] = kind
-    for (i, v) in [x, y, z].enumerated() {
-        var f = Float32(v).bitPattern.littleEndian
-        withUnsafeBytes(of: &f) { raw in
-            for (j, b) in raw.enumerated() { pkt[1 + i * 4 + j] = b }
-        }
+    let now = CFAbsoluteTimeGetCurrent()
+    lastReport = now
+    guard listening else { batchCount = 0; return }
+    batchTimes[batchCount] = now
+    let o = batchCount * recordLen
+    batch.withUnsafeMutableBytes { SensorWire.write(kind: kind, x: x, y: y, z: z, into: $0, at: o) }
+    batchCount += 1
+    if batchCount == batchMax || now - batchTimes[0] >= batchAgeSec { flush(now) }
+}
+
+func flush(_ now: Double) {
+    batch.withUnsafeMutableBytes { raw in
+        for i in 0..<batchCount { SensorWire.stampAge(now - batchTimes[i], into: raw, at: i * recordLen) }
     }
-    var d = dest
-    _ = withUnsafePointer(to: &d) { p in
+    _ = withUnsafePointer(to: &dest) { p in
         p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
-            sendto(sock, pkt, pkt.count, 0, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
+            sendto(sock, batch, batchCount * recordLen, 0, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
         }
     }
+    batchCount = 0
 }
 
 // ---- wake the SPU drivers ----
@@ -78,8 +114,7 @@ func wakeSPU() {
 // ---- HID report callbacks ----
 func propInt(_ svc: io_object_t, _ key: String) -> Int {
     guard let ref = IORegistryEntryCreateCFProperty(svc, key as CFString, kCFAllocatorDefault, 0) else { return 0 }
-    let v = ref.takeRetainedValue()
-    return (v as? Int) ?? 0
+    return (ref.takeRetainedValue() as? Int) ?? 0
 }
 
 func parseAndSend(kind: UInt8, report: UnsafeMutablePointer<UInt8>, length: CFIndex) {
@@ -105,11 +140,12 @@ let gyroCallback: IOHIDReportCallback = { _, _, _, _, _, report, length in
 var retainedBuffers: [UnsafeMutablePointer<UInt8>] = []
 var openedDevices: [IOHIDDevice] = []
 
-func openSensors() -> Int {
+/// Returns (devices found, devices opened).
+func openSensors() -> (found: Int, opened: Int) {
     var it: io_iterator_t = 0
     guard IOServiceGetMatchingServices(kIOMainPortDefault,
-                                       IOServiceMatching("AppleSPUHIDDevice"), &it) == KERN_SUCCESS else { return 0 }
-    var opened = 0
+                                       IOServiceMatching("AppleSPUHIDDevice"), &it) == KERN_SUCCESS else { return (0, 0) }
+    var found = 0, opened = 0
     while case let svc = IOIteratorNext(it), svc != 0 {
         defer { IOObjectRelease(svc) }
         let page = propInt(svc, "PrimaryUsagePage")
@@ -117,9 +153,11 @@ func openSensors() -> Int {
         var callback: IOHIDReportCallback?
         if page == vendorPage && usage == usageAccel { callback = accelCallback }
         if page == vendorPage && usage == usageGyro { callback = gyroCallback }
-        guard let cb = callback, let device = IOHIDDeviceCreate(kCFAllocatorDefault, svc) else { continue }
-        guard IOHIDDeviceOpen(device, 0) == kIOReturnSuccess else {
-            FileHandle.standardError.write("touchmacd: open failed for usage \(usage)\n".data(using: .utf8)!)
+        guard let cb = callback else { continue }
+        found += 1
+        guard let device = IOHIDDeviceCreate(kCFAllocatorDefault, svc),
+              IOHIDDeviceOpen(device, 0) == kIOReturnSuccess else {
+            log("open failed for usage \(usage)")
             continue
         }
         let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: 256)
@@ -130,14 +168,41 @@ func openSensors() -> Int {
         opened += 1
     }
     IOObjectRelease(it)
-    return opened
+    return (found, opened)
 }
 
-wakeSPU()
-let n = openSensors()
-guard n > 0 else {
-    FileHandle.standardError.write("touchmacd: no SPU accel/gyro devices found on this Mac\n".data(using: .utf8)!)
-    exit(1)
+// ---- start ----
+// At early boot the SPU driver may not be matched yet: retry before giving up.
+var result = (found: 0, opened: 0)
+for attempt in 1...6 {
+    wakeSPU()
+    result = openSensors()
+    if result.opened > 0 { break }
+    log("no sensor yet (attempt \(attempt)/6, found \(result.found))")
+    sleep(5)
 }
-print("touchmacd: streaming \(n) sensors to 127.0.0.1:\(port)")
+if result.found == 0 {
+    log("no SPU accel/gyro devices on this Mac; exiting for good")
+    exit(0)  // KeepAlive.SuccessfulExit=false: launchd will not restart a clean exit
+}
+if result.opened == 0 {
+    exit(3)  // devices exist but would not open: let launchd retry
+}
+log("streaming \(result.opened) sensors to 127.0.0.1:\(dataPort) while the app listens")
+
+// ---- once a second: listener check, stall watchdog ----
+let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + 1, 1, 0, 0) { _ in
+    let now = CFAbsoluteTimeGetCurrent()
+    var byte: UInt8 = 0
+    while recv(pingSock, &byte, 1, 0) >= 0 { lastPing = now }
+    let wasListening = listening
+    listening = now - lastPing < listenerTimeoutSec
+    if listening && !wasListening { wakeSPU() }
+    // ponytail: exit-and-restart is the whole sleep/stall recovery; add IOPM wake hooks if restarts prove slow
+    if now - lastReport > stallSec {
+        log("no reports for \(Int(now - lastReport)) s (sleep or driver reset); exiting so launchd restarts us")
+        exit(2)
+    }
+}
+CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, .defaultMode)
 CFRunLoopRun()

@@ -1,31 +1,35 @@
 import Foundation
+import IOKit
+import TouchMacCore
 
-/// Listens on UDP 127.0.0.1:48291 for touchmacd sample datagrams:
-/// [1 byte kind: 0=accel 1=gyro][3 x Float32 LE x/y/z]
+/// Listens on UDP 127.0.0.1:48291 for touchmacd sample batches (format: SensorWire)
+/// and pings the helper on :48292 so it only streams while the app listens.
+/// Callbacks run on `queue`; touch the engine only from there.
 final class SensorClient {
+    static let dataPort: UInt16 = 48291
+    static let pingPort: UInt16 = 48292
+
     var onAccel: ((Double, Double, Double, Double) -> Void)?  // t, x, y, z
     var onGyro: ((Double, Double, Double, Double) -> Void)?
-    private(set) var lastPacketAt: Date?
+    let queue = DispatchQueue(label: "touchmac.sensor", qos: .userInteractive)
+    private(set) var startError: String?
 
-    private let queue = DispatchQueue(label: "touchmac.sensor")
     private var sock: Int32 = -1
     private var source: DispatchSourceRead?
+    private var lastPacket = 0.0  // systemUptime; read and written on `queue`
 
     func start() {
         sock = socket(AF_INET, SOCK_DGRAM, 0)
-        guard sock >= 0 else { return }
-        var yes: Int32 = 1
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = UInt16(48291).bigEndian
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        guard sock >= 0 else {
+            startError = "Could not open a network socket (\(String(cString: strerror(errno))))."
+            return
+        }
+        var addr = Self.loopback(Self.dataPort)
         let bound = withUnsafePointer(to: &addr) { p in
-            p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
-                bind(sock, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
+            p.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
         }
         guard bound == 0 else {
+            startError = "Port \(Self.dataPort) is in use. Quit any other copy of TouchMac and reopen it."
             close(sock)
             sock = -1
             return
@@ -37,24 +41,59 @@ final class SensorClient {
     }
 
     private func drain() {
-        var buf = [UInt8](repeating: 0, count: 64)
+        var buf = [UInt8](repeating: 0, count: 2048)
         while true {
             let n = recv(sock, &buf, buf.count, MSG_DONTWAIT)
             guard n >= 13 else { break }
-            let t = ProcessInfo.processInfo.systemUptime
-            lastPacketAt = Date()
-            func f(_ off: Int) -> Double {
-                var bits: UInt32 = 0
-                memcpy(&bits, Array(buf[off..<off + 4]), 4)
-                return Double(Float32(bitPattern: UInt32(littleEndian: bits)))
+            let now = ProcessInfo.processInfo.systemUptime
+            lastPacket = now
+            buf.withUnsafeBytes { raw in
+                SensorWire.decode(raw, count: n, now: now) { kind, t, x, y, z in
+                    if kind == 0 { onAccel?(t, x, y, z) } else { onGyro?(t, x, y, z) }
+                }
             }
-            let x = f(1), y = f(5), z = f(9)
-            if buf[0] == 0 { onAccel?(t, x, y, z) } else { onGyro?(t, x, y, z) }
+        }
+    }
+
+    /// Tell the helper someone is listening. Call about once a second.
+    func ping() {
+        guard sock >= 0 else { return }
+        var addr = Self.loopback(Self.pingPort)
+        var byte: UInt8 = 1
+        _ = withUnsafePointer(to: &addr) { p in
+            p.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                sendto(sock, &byte, 1, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
         }
     }
 
     var isAlive: Bool {
-        guard let last = lastPacketAt else { return false }
-        return Date().timeIntervalSince(last) < 1.5
+        queue.sync { lastPacket > 0 && ProcessInfo.processInfo.systemUptime - lastPacket < 1.5 }
     }
+
+    private static func loopback(_ port: UInt16) -> sockaddr_in {
+        var a = sockaddr_in()
+        a.sin_family = sa_family_t(AF_INET)
+        a.sin_port = port.bigEndian
+        a.sin_addr.s_addr = inet_addr("127.0.0.1")
+        return a
+    }
+
+    /// True when this Mac exposes the SPU accelerometer. Reading the registry needs no root.
+    static let hardwarePresent: Bool = {
+        var it: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("AppleSPUHIDDevice"), &it) == KERN_SUCCESS
+        else { return false }
+        defer { IOObjectRelease(it) }
+        var found = false
+        while case let svc = IOIteratorNext(it), svc != 0 {
+            let page = IORegistryEntryCreateCFProperty(svc, "PrimaryUsagePage" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? Int
+            let usage = IORegistryEntryCreateCFProperty(svc, "PrimaryUsage" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? Int
+            if page == 0xFF00 && usage == 3 { found = true }
+            IOObjectRelease(svc)
+        }
+        return found
+    }()
 }

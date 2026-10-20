@@ -8,21 +8,23 @@ PRs beat large rewrites.
 ```sh
 git clone https://github.com/SuzalShrestha/touchmac.git
 cd touchmac/app
-swift run selftest    # engine tests, no hardware
+swift run selftest    # engine, classifier and config tests, no hardware
 sh make_app.sh        # builds build/TouchMac.app
 open build/TouchMac.app
 ```
 
-Requirements: Apple Silicon MacBook, macOS 14+, Xcode Command Line Tools.
+Requirements: Apple Silicon MacBook, macOS 14+, Xcode or the Command Line Tools.
+CI (`.github/workflows/ci.yml`) runs the self-test in debug and release and builds the app on every push.
 
 ## What to work on
 
 Good first targets:
 
-- Detection quality (threshold defaults, feature design, near/far separation)
-- UX: calibration flow, false-positive feedback, onboarding
-- launchd helper so the sensor survives reboot without a password re-prompt
-- Packaging (notarization, DMG) for smoother downloads
+- Detection quality (feature design, near/far separation). Measure changes
+  against the real-tap fixture in `app/Sources/selftest/Fixture.swift`; add
+  fixtures from other Macs and desks.
+- Packaging (Developer ID signing, notarization, DMG) for smoother downloads
+- More actions (Focus modes, brightness)
 - Docs and hardware compatibility reports
 
 Open an issue before large architecture changes.
@@ -38,10 +40,10 @@ Open an issue before large architecture changes.
 
 | Path | Role |
 |------|------|
-| `app/Sources/TouchMacCore/` | Platform-free tap engine + k-NN classifier |
-| `app/Sources/touchmacd/` | Root helper: HID → UDP |
-| `app/Sources/TouchMac/` | SwiftUI app, actions, config |
-| `app/Sources/selftest/` | Synthetic stream checks |
+| `app/Sources/TouchMacCore/` | Platform-free tap engine, classifier, gestures, config model |
+| `app/Sources/touchmacd/` | Root helper (LaunchDaemon): HID → UDP, watchdog |
+| `app/Sources/TouchMac/` | SwiftUI app, helper installer, actions |
+| `app/Sources/selftest/` | Synthetic + real-tap checks |
 | `touchmac.py` | Earlier Python CLI prototype |
 
 ## License

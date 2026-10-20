@@ -32,7 +32,7 @@ different vibration signature.
 
 ## Download
 
-**[Get TouchMac v0.1.0 →](https://github.com/SuzalShrestha/touchmac/releases/latest)**
+**[Get TouchMac →](https://github.com/SuzalShrestha/touchmac/releases/latest)**
 
 Or build from source (below). The release binary is ad-hoc signed — after
 unzipping, clear quarantine once:
@@ -44,14 +44,12 @@ open ~/Downloads/TouchMac.app
 
 ## Requirements
 
-- Apple Silicon MacBook (tested on M1 Pro MacBook Pro; the sensor is present
-  on M1 Pro/Max and M2/M3/M4-family MacBook Pros — check with the command in
-  [Troubleshooting](#troubleshooting))
+- Apple Silicon MacBook that exposes the SPU accelerometer (tested on an M1 Pro
+  MacBook Pro). The app checks this on first launch; see
+  [Troubleshooting](#troubleshooting) for the manual check.
 - macOS 14+
-- Xcode Command Line Tools (`xcode-select --install`) — full Xcode not needed
-  if you only use the prebuilt release
-- Admin password (the sensor's HID device is root-only; see
-  [How it works](#how-it-works))
+- Admin password, once (to install the sensor helper; see [How it works](#how-it-works))
+- To build: Xcode or the Command Line Tools (`xcode-select --install`)
 
 ## Quick start (from source)
 
@@ -62,26 +60,31 @@ sh make_app.sh              # builds app/build/TouchMac.app (SwiftPM, release)
 open build/TouchMac.app
 ```
 
-Inside the app:
+The welcome guide walks you through it:
 
-1. **Start Sensor** — launches the bundled `touchmacd` helper. You'll be asked
-   for your admin password once per boot. When the status pill turns green
-   ("Sensor live"), samples are flowing.
-2. **Assign actions** — click any zone card and pick what a tap should do:
-   - Open app (with app picker; the card shows the real app icon)
-   - Screenshot (interactive, to clipboard)
-   - Volume up / down / mute
-   - Play / Pause (system media key)
-   - Any shell command
-3. **Calibrate each zone** — from the zone's editor, hit **Calibrate** and tap
-   that spot on the desk 10 times at your normal tapping strength. Repeat per
-   zone. Zones you skip can't be detected.
-4. **Tap the desk.** The matched zone card flashes and its action runs. Recent
-   detections (with match distance) appear in the footer log.
+1. **Hardware check** — confirms the motion sensor is there.
+2. **Install the sensor helper** — one password prompt. The helper is a
+   LaunchDaemon: it starts with your Mac and restarts itself after sleep or a
+   crash. You never start it by hand again.
+3. **Permissions (optional)** — Accessibility for media keys, Screen Recording
+   for screenshots. Only needed if you use those actions.
+4. **Calibrate** — tap each of the six spots 10 times. After each zone you see
+   how well TouchMac can tell it apart from the others, and which zone it is
+   confused with, if any.
 
-**Test mode** (header toggle) flashes zones without running actions — use it to
-verify calibration before going live. **Enabled** toggle and the menu-bar icon
-control detection globally.
+Then click any zone card to choose what a **single tap** and a **double tap**
+do. TouchMac lives in the menu bar; closing the window keeps it running.
+
+## Features
+
+| | |
+|---|---|
+| **Actions** | Open app · open website · run a Shortcuts shortcut · screenshot · volume up/down/mute · play/pause, next, previous · Mission Control · sleep display · any shell command (runs in your login shell, so Homebrew tools work) |
+| **Gestures** | Single and double tap per zone: up to 12 buttons. A zone without a double-tap action fires instantly. |
+| **Calibration quality** | Leave-one-out accuracy per zone and overall, with the zone each one is mistaken for. Stray taps (a keystroke during calibration) are dropped automatically. |
+| **Robust detection** | Threshold rises in noisy conditions; taps while you type or click are ignored; desk ringing never fires twice. |
+| **Feedback** | Live signal meter with the current threshold, activity log with every action, unmatched tap and error (missing permission, app not found, failing command). |
+| **App** | Onboarding, Sensitivity page (tap strength, matching tolerance), menu-bar mode, launch at login, test mode, single-instance guard. |
 
 ## How it works
 
@@ -101,46 +104,49 @@ Prior art: the [Knock](https://www.producthunt.com/products/knock-7) app,
 ### Architecture
 
 ```
-┌──────────────────────────────┐        ┌──────────────────────────────────┐
-│ touchmacd (root)             │  UDP   │ TouchMac.app (user)              │
-│                              │ ─────▶ │                                  │
-│ · wakes SPU drivers          │ :48291 │ SensorClient  → TapEngine        │
-│ · opens accel+gyro HID       │        │   (UDP recv)     (onset detect)  │
-│ · parses 22-byte reports     │        │                     ↓            │
-│ · sends [kind][x][y][z]      │        │              Classifier (k-NN)   │
-│   datagrams to localhost     │        │                     ↓            │
-└──────────────────────────────┘        │              ActionRunner        │
-                                        │   SwiftUI: zones, calibration,   │
-                                        │   menu bar, config JSON          │
-                                        └──────────────────────────────────┘
+┌────────────────────────────────────┐        ┌──────────────────────────────────┐
+│ touchmacd  (root, LaunchDaemon)    │  UDP   │ TouchMac.app (user)              │
+│                                    │ ─────▶ │                                  │
+│ · wakes SPU drivers                │ :48291 │ SensorClient → TapEngine         │
+│ · opens accel+gyro HID             │        │                   ↓              │
+│ · sends [kind][x][y][z] datagrams  │ ◀───── │  Classifier (k-NN) → TapGrouper  │
+│   only while the app pings         │ :48292 │                   ↓              │
+│ · exits on stall → launchd restart │  ping  │             ActionRunner         │
+└────────────────────────────────────┘        └──────────────────────────────────┘
 ```
 
 - **`touchmacd`** only *emits* sensor data; it never executes anything.
   Actions run inside the user-level app, so a local process spoofing
   datagrams gains nothing it couldn't do by running commands as the user
   directly — that's why the localhost socket is unauthenticated.
-- The app launches the helper on demand via an admin-privileges prompt
-  (`do shell script … with administrator privileges`). A pidfile at
-  `/var/run/touchmacd.pid` prevents duplicate helpers. The helper keeps
-  running after the app quits; it dies on reboot.
+- The app installs it once: the binary is copied to
+  `/Library/PrivilegedHelperTools/com.sujal.touchmacd` (root-owned) and a
+  plist to `/Library/LaunchDaemons/com.sujal.touchmacd.plist`. The root
+  binary never runs from the user-writable app bundle.
+- **Sleep and stalls:** if no sensor report arrives for 5 s, the helper exits
+  and launchd restarts it, which wakes the SPU again. At boot it retries for
+  30 s before deciding the Mac has no sensor.
+- **Energy:** the helper sends only while the app pings it (once a second).
+- Settings → Sensor shows the helper state and has Reinstall, Restart,
+  Uninstall and Show Log. The app also detects an outdated helper after an update.
 
 ### Detection pipeline
 
-1. **Gravity removal** — per-axis exponential moving average (time-constant
-   0.15 s) subtracts orientation; the residual is the dynamic acceleration.
-2. **Onset detection** — when the dynamic magnitude crosses `thresholdG`
-   (default 0.04 g) outside a 250 ms refractory window, a tap starts.
+1. **Gravity removal** — per-axis exponential moving average (time constant
+   0.15 s). The estimate is frozen during a tap and its ringing, so a strong
+   tap cannot leak into it and fire a phantom second tap.
+2. **Onset detection** — the dynamic magnitude crosses the threshold outside
+   a 150 ms refractory window. The threshold is `thresholdG`, raised to
+   6× the background noise when the desk is busy (`adaptiveThreshold`).
 3. **Feature window** — for 60 ms, accel and gyro impulses are summed into a
-   6-dim vector, normalized to unit length (direction of the vibration), plus
-   a 7th dimension: log10 of the peak magnitude. Direction separates
-   left/right/front; peak magnitude separates near from far on the same side.
-   If the gyro stream stalls, the engine finishes on accel alone rather than
-   silently dying.
-4. **Classification** — k-NN (k = 3) against your stored calibration taps,
-   dimensions z-scored across the whole training set, majority vote. If the
-   winning neighbors' mean distance exceeds `maxDistance` the tap is
-   rejected — that's what keeps keyboard thumps and desk bumps from firing
-   random actions.
+   6-dim vector, normalized to unit length, plus a 7th dimension: log10 of the
+   peak magnitude. If the gyro stream stalls, the engine finishes on accel alone.
+4. **Input filter** — a tap within 0.35 s of a keystroke or click is ignored
+   (`ignoreWhileTyping`; reads system idle time, no permission needed).
+5. **Classification** — k-NN (k = 3) against your calibration taps, z-scored
+   dimensions, majority vote; rejected if the winning neighbors are further
+   than `maxDistance`.
+6. **Gestures** — a second tap on the same zone within 0.45 s is a double tap.
 
 All engine timing is wall-clock based, so the logic is sample-rate independent
 and fully testable without hardware (`swift run selftest`).
@@ -148,43 +154,48 @@ and fully testable without hardware (`swift run selftest`).
 ## Configuration
 
 `~/Library/Application Support/TouchMac/config.json` — written by the app,
-hand-editable:
+hand-editable. Missing keys take their defaults and an unknown action becomes
+"not set", so a file from an older or newer version never loses your
+calibration. An unreadable file is moved aside as `config.broken-<date>.json`
+and the app tells you; it is never overwritten.
 
-| Key           | Default | Meaning                                                        |
-|---------------|---------|----------------------------------------------------------------|
-| `thresholdG`  | `0.04`  | Onset threshold in g. Lower = more sensitive (and more false positives from typing). |
-| `maxDistance` | `6.0`   | k-NN rejection distance in z-score units. Lower = stricter matching. |
-| `zones`       | —       | Per zone: `id`, `name`, `action`, `samples` (calibration features). |
+| Key                 | Default | Meaning |
+|---------------------|---------|---------|
+| `thresholdG`        | `0.04`  | Minimum onset threshold in g ("Tap strength"). |
+| `adaptiveThreshold` | `true`  | Raise the threshold while background vibration is high. |
+| `ignoreWhileTyping` | `true`  | Ignore taps right after a keystroke or click. |
+| `maxDistance`       | `6.0`   | k-NN rejection distance in z-score units ("Tolerance"). |
+| `zones`             | —       | Per zone: `id`, `name`, `action`, `doubleAction`, `samples`. |
 
-Zone actions are stored as tagged JSON, e.g.
-`{"action":{"openApp":{"_0":"/Applications/Safari.app"}}}` or
-`{"action":{"shell":{"_0":"open -a Notes"}}}`.
+Actions are tagged JSON, e.g. `{"openApp":{"_0":"/Applications/Safari.app"}}`,
+`{"shortcut":{"_0":"Focus"}}` or `{"volumeUp":{}}`.
 
 ## Project layout
 
 ```
 touchmac/
-├── app/                          # the macOS app (SwiftPM, no Xcode)
+├── app/                          # the macOS app (SwiftPM, no Xcode project)
 │   ├── Package.swift             # 4 targets, macOS 14+, Swift 5 language mode
 │   ├── make_app.sh               # release build → build/TouchMac.app (ad-hoc signed)
-│   ├── Info.plist
+│   ├── Info.plist, AppIcon.icns
+│   ├── tools/make_icon.swift     # renders the app icon
 │   └── Sources/
-│       ├── TouchMacCore/         # platform-free engine, shared + testable
-│       │   ├── TapEngine.swift   #   onset detection state machine
-│       │   └── Classifier.swift  #   z-scored k-NN with rejection
-│       ├── touchmacd/main.swift  # root helper: IOKit HID → UDP
-│       ├── selftest/main.swift   # synthetic-stream engine checks
+│       ├── TouchMacCore/         # platform-free, tested
+│       │   ├── TapEngine.swift   #   onset detection, adaptive threshold
+│       │   ├── Classifier.swift  #   k-NN, leave-one-out quality, outlier pruning
+│       │   ├── TapGrouper.swift  #   single / double tap
+│       │   └── Model.swift       #   config, zones, actions (lenient Codable)
+│       ├── touchmacd/main.swift  # root helper: IOKit HID → UDP, watchdog
+│       ├── selftest/             # engine/config checks + real-tap fixture
 │       └── TouchMac/             # SwiftUI app
-│           ├── TouchMacApp.swift #   window + MenuBarExtra
-│           ├── AppState.swift    #   wiring: sensor → engine → classifier → actions
-│           ├── SensorClient.swift#   UDP listener
-│           ├── Model.swift       #   config, zones, TapAction (Codable)
-│           ├── ActionRunner.swift#   executes assigned actions
-│           └── Views/            #   MainView, ZonePadView, ZoneEditorView,
-│                                 #   CalibrationOverlay
+│           ├── AppState.swift    #   sensor → engine → classifier → gestures → actions
+│           ├── Helper.swift      #   LaunchDaemon install / update / uninstall
+│           ├── SensorClient.swift, ActionRunner.swift, TouchMacApp.swift
+│           └── Views/            #   Desk, Sensitivity, Activity, Settings,
+│                                 #   Onboarding, zone editor, calibration
 ├── docs/                         # product website (GitHub Pages)
-├── touchmac.py                   # earlier Python CLI prototype (macimu-based,
-├── test_touchmac.py              #   2 zones × 1/2/3-tap counting) + its tests
+├── .github/workflows/ci.yml      # build + self-test on every push
+├── touchmac.py, test_touchmac.py # earlier Python CLI prototype + its tests
 └── README.md
 ```
 
@@ -192,14 +203,17 @@ touchmac/
 
 ```sh
 cd app
-swift run selftest        # engine + classifier checks, no hardware needed
-python3 ../test_touchmac.py   # Python prototype's detector tests
+swift run selftest              # no hardware needed
+swift run -c release selftest   # same checks; they use precondition, so they stay on
+python3 ../test_touchmac.py     # Python prototype's detector tests
 ```
 
-`selftest` covers: onset detection above/below threshold, refractory
-suppression of tap ringing, detection surviving a dead gyro stream, and
-classifier separation of direction and near/far magnitude plus outlier
-rejection.
+`selftest` covers onset detection, refractory vs. double-tap spacing, a dead
+gyro stream, the adaptive threshold in noise, classifier separation and
+rejection, outlier pruning, single/double gestures, config upgrades
+(missing keys, unknown actions, corrupt file), and a **regression floor on
+60 real calibration taps** from an M1 Pro (leave-one-out accuracy must stay
+≥ 80 %; v0.1.0 measured 83 %).
 
 ## Troubleshooting
 
@@ -212,43 +226,44 @@ ioreg -c AppleSPUHIDDevice -r -d1 | grep -c PrimaryUsage
 Non-zero → present. Intel Macs and the M1 (non-Pro) MacBook Air/Pro 13" don't
 expose it.
 
-**"Start Sensor" but status never goes green** — check the helper log:
-`cat /var/log/touchmacd.log`. "no SPU accel/gyro devices found" means your
-model doesn't expose the sensor; "open failed" usually means it isn't running
-as root.
+**Status stays "Waiting for the sensor"** — open Settings → Sensor → Show Log
+(`/var/log/touchmacd.log`). "no SPU accel/gyro devices" means your model does
+not expose the sensor; "open failed" means it could not open the device.
+Try Restart Helper, then Reinstall Helper.
 
-**Taps detected but wrong zone** — recalibrate with more physical distance
-between spots, and tap with consistent strength (near/far discrimination
-depends on it). Lower `maxDistance` to reject ambiguous taps instead of
+**Taps detected but wrong zone** — check the accuracy badges on the Desk page.
+Recalibrate the zones that are mixed up, with more distance between the spots
+and a steady tap strength. Lower *Tolerance* to ignore unclear taps instead of
 guessing.
 
-**Typing triggers taps** — raise `thresholdG` (try 0.06–0.08), or tap harder.
-Desk material matters: rigid desks transmit crisper signatures than soft or
-padded surfaces.
+**Typing or the trackpad triggers taps** — keep *Ignore taps while typing or
+clicking* on, and raise *Tap strength*.
 
-**Nothing detected at all** — lower `thresholdG`, confirm the green status
-pill, and check zones are calibrated (orange "Calibrate" badge = not yet).
+**Nothing detected** — watch the live signal on the Sensitivity page while you
+tap. If the bars stay under the orange line, lower *Tap strength*.
 
-**"App is damaged" / can't open the download** — Gatekeeper blocks ad-hoc
-signed apps from the internet. Run:
+**An action does nothing** — the Activity page shows why (for example a
+missing permission or an app that moved).
 
-```sh
-xattr -cr /path/to/TouchMac.app
-```
+**Build fails with "plugin for module 'SwiftUIMacros' not found"** — the
+Command Line Tools 27 SDK lacks SwiftUI's macro plugin. `make_app.sh` falls
+back to the 26 SDK the tools also ship. With plain `swift build`, run
+`SDKROOT=$(xcode-select -p)/SDKs/MacOSX26.sdk swift build`, or use Xcode.
 
-Then open again (or right-click → Open).
+**"App is damaged" / can't open the download** — run
+`xattr -cr /path/to/TouchMac.app`, then open again.
+
+**Remove everything** — Settings → Sensor → Uninstall, then delete the app
+and `~/Library/Application Support/TouchMac`.
 
 ## Known limitations
 
 - Prototype-grade zone separation: left/right/front split reliably by
   direction; near/far on the same side rides on tap intensity, which is
-  noisier. Six zones is the honest experimental maximum, not a guarantee.
-- Helper must be restarted after reboot (one password prompt per boot). No
-  launchd auto-start yet.
-- The `.app` is ad-hoc signed — fine for local use and OSS distribution with
-  the `xattr` step above; not notarized for App Store–style installs.
-- Media key (Play/Pause) uses a synthesized system event; some macOS versions
-  gate this behind Accessibility permissions.
+  noisier. The calibration score tells you how well it works on your desk.
+- The `.app` is ad-hoc signed, not notarized. macOS ties privacy permissions
+  to the signature, so after rebuilding you may need to grant them again.
+- Media keys use a synthesized system event and need Accessibility permission.
 
 ## Contributing
 
