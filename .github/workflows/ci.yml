@@ -56,11 +56,11 @@ jobs:
       - name: Python prototype tests
         working-directory: .
         run: python3 test_touchmac.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: TouchMac.app
           path: app/build/TouchMac.app
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: screens
           path: ${{ runner.temp }}/screens
