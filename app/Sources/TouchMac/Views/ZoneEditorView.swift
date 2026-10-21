@@ -25,6 +25,18 @@ struct ZoneEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Circle().fill(Color.zone(zone.id)).frame(width: 12, height: 12)
+                    .shadow(color: Color.zone(zone.id).opacity(0.7), radius: 5)
+                Text(zone.name.isEmpty ? calibrated.name : zone.name).font(.display(20)).foregroundStyle(Color.ink)
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 4)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Color.zone(zone.id)).frame(height: 3)
+            }
             Form {
                 Section {
                     TextField("Name", text: $zone.name)
@@ -45,10 +57,12 @@ struct ZoneEditorView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(calibrated.isCalibrated ? "\(calibrated.samples.count) taps recorded" : "Not calibrated")
                             if let score = state.quality?.perZone[zone.id] {
-                                Text("\(Int((score * 100).rounded()))% of its taps are recognized"
-                                     + (state.quality?.confusedWith[zone.id].map { " · sometimes read as \(state.zone($0).name)" } ?? ""))
-                                    .font(.caption)
-                                    .foregroundStyle(qualityColor(score))
+                                Text(
+                                    "\(Int((score * 100).rounded()))% of its taps are recognized"
+                                        + (state.quality?.confusedWith[zone.id].map { " · sometimes read as \(state.zone($0).name)" } ?? "")
+                                )
+                                .font(.caption)
+                                .foregroundStyle(qualityColor(score))
                             } else if !calibrated.isCalibrated {
                                 Text("This zone cannot be detected yet.")
                                     .font(.caption)
@@ -70,10 +84,11 @@ struct ZoneEditorView: View {
                 }
             }
             .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
 
             HStack {
                 Button {
-                    state.run(action, from: "Test")
+                    state.run(action, from: "Test", zone: zone.id)
                 } label: {
                     Label("Test Action", systemImage: "play")
                 }
@@ -82,14 +97,17 @@ struct ZoneEditorView: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") { save(); dismiss() }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                Button("Save") {
+                    save(); dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.ink)
             }
             .padding(16)
         }
-        .frame(width: 480)
-        .frame(minHeight: 560)
+        .frame(width: 500)
+        .frame(minHeight: 600)
+        .background(Color.canvas)
     }
 
     private func save() {
