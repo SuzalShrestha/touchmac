@@ -13,7 +13,7 @@ jobs:
   lint:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # commitlint reads the PR's commits
       - uses: actions/setup-node@v4
@@ -39,7 +39,7 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Toolchain
         run: swift --version
       # Build, then run the binary: on this runner `swift run` is killed (SIGKILL) since the package
