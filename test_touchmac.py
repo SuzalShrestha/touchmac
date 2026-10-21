@@ -1,6 +1,6 @@
 """Synthetic-stream check of TapDetector: onset, zone classify, multi-tap grouping."""
 
-from touchmac import TapDetector, DEFAULT_CONFIG
+from touchmac import DEFAULT_CONFIG, TapDetector
 
 CFG = {
     **DEFAULT_CONFIG,

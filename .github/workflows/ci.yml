@@ -28,7 +28,7 @@ jobs:
       - name: Swift (swift-format)
         run: npm run lint:swift
       - name: Python (ruff)
-        run: pipx run ruff check . && pipx run ruff format --check .
+        run: pipx run ruff==0.17.1 check . && pipx run ruff==0.17.1 format --check . # pinned: newer versions add rules; ruff.toml lists the rules
       - name: Commit messages
         if: github.event_name == 'pull_request'
         run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}

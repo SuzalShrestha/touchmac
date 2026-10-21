@@ -1,0 +1,4 @@
+# The rules are listed, not left to the defaults: newer ruff versions widen the defaults,
+# so CI (pinned in ci.yml) and an older local ruff would disagree.
+[lint]
+select = ["E4", "E7", "E9", "F", "I", "EXE"]
