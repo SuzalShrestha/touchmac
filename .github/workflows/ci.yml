@@ -5,7 +5,34 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # commitlint reads the PR's commits
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: JavaScript (oxlint, eslint)
+        run: npm run lint:js
+      - name: Formatting (prettier)
+        run: npm run format:check
+      - name: Swift (swift-format)
+        run: npm run lint:swift
+      - name: Python (ruff)
+        run: pipx run ruff check . && pipx run ruff format --check .
+      - name: Commit messages
+        if: github.event_name == 'pull_request'
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
+
   build-and-test:
     runs-on: macos-15
     defaults:
@@ -21,6 +48,9 @@ jobs:
         run: swift run -c release selftest
       - name: Build app bundle
         run: sh make_app.sh
+      - name: Screens render (snapshot mode, no sensor)
+        continue-on-error: true # the hosted runner may have no GPU for SceneKit
+        run: build/TouchMac.app/Contents/MacOS/TouchMac --snapshot "$RUNNER_TEMP/screens" | tee snapshot.log && ! grep -q warning snapshot.log
       - name: Python prototype tests
         working-directory: .
         run: python3 test_touchmac.py
@@ -28,3 +58,7 @@ jobs:
         with:
           name: TouchMac.app
           path: app/build/TouchMac.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: ${{ runner.temp }}/screens
