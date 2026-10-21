@@ -39,7 +39,7 @@ jobs:
           ref: ${{ needs.release-please.outputs.tag }}
       - name: Self-test
         working-directory: app
-        run: swift run -c release selftest
+        run: swift build -c release --product selftest && "$(swift build -c release --show-bin-path)/selftest" # not swift run, see ci.yml
       - name: Build app
         run: sh app/make_app.sh
       - name: Zip

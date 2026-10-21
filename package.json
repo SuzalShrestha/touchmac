@@ -11,7 +11,7 @@
     "lint:py": "ruff check . && ruff format --check .",
     "format": "prettier --write . && swift format --in-place --recursive app/Sources app/Package.swift tools && ruff format .",
     "format:check": "prettier --check .",
-    "test": "cd app && swift run selftest && cd .. && python3 test_touchmac.py",
+    "test": "cd app && swift build --product selftest && \"$(swift build --show-bin-path)/selftest\" && cd .. && python3 test_touchmac.py",
     "snapshots": "cd app && sh make_app.sh && build/TouchMac.app/Contents/MacOS/TouchMac --snapshot ../docs/screens"
   },
   "lint-staged": {
