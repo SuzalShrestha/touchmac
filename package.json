@@ -1,0 +1,45 @@
+{
+  "name": "touchmac-tooling",
+  "private": true,
+  "description": "Lint, format and commit tooling for the TouchMac repo. The app itself builds with SwiftPM in app/.",
+  "type": "module",
+  "scripts": {
+    "prepare": "husky",
+    "lint": "npm run lint:js && npm run lint:swift && npm run lint:py && npm run format:check",
+    "lint:js": "oxlint docs && eslint docs",
+    "lint:swift": "swift format lint --strict --recursive app/Sources app/Package.swift tools",
+    "lint:py": "ruff check . && ruff format --check .",
+    "format": "prettier --write . && swift format --in-place --recursive app/Sources app/Package.swift tools && ruff format .",
+    "format:check": "prettier --check .",
+    "test": "cd app && swift run selftest && cd .. && python3 test_touchmac.py",
+    "snapshots": "cd app && sh make_app.sh && build/TouchMac.app/Contents/MacOS/TouchMac --snapshot ../docs/screens"
+  },
+  "lint-staged": {
+    "*.js": [
+      "oxlint",
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,html,json,md,yml,yaml}": "prettier --write",
+    "*.swift": "swift format --in-place",
+    "*.py": [
+      "ruff check --fix",
+      "ruff format"
+    ]
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-plugin-oxlint": "^1.89.0",
+    "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "oxlint": "^1.89.0",
+    "prettier": "^3.9.10"
+  }
+}

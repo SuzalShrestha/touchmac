@@ -4,3 +4,4 @@ app/.build/
 app/build/
 dist/
 .DS_Store
+node_modules/
