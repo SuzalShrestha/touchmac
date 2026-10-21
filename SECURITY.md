@@ -9,7 +9,7 @@ only supported line.
 ## Architecture notes
 
 - **`touchmacd`** runs as root solely to open the Apple SPU HID devices. It
-  only *emits* accelerometer/gyroscope samples to the app. It never
+  only _emits_ accelerometer/gyroscope samples to the app. It never
   runs shell commands or opens apps.
 - **Actions** (open app, shell, media keys, etc.) run inside the user-level
   `TouchMac.app` process under your account.
@@ -31,6 +31,15 @@ only supported line.
   Settings → Sensor → Reinstall Helper to move to the safe location.
 - The install script receives the bundle path as a POSIX-quoted argument, so
   unusual folder names (with spaces or quotes) cannot change the command.
+
+## Updates
+
+- TouchMac installs an update only if the update's EdDSA (ed25519) signature matches
+  `SUPublicEDKey` in the app's Info.plist. The feed and the archive come over HTTPS from GitHub Releases.
+- The private key exists only in the maintainer's keychain and as the `SPARKLE_PRIVATE_KEY`
+  secret, which only the release workflow reads. Pull requests from forks cannot read it.
+- A new app version can ship a new sensor helper. The helper runs as root, so macOS asks for an
+  administrator password before TouchMac replaces it.
 
 ## Reporting a vulnerability
 

@@ -1,6 +1,7 @@
 # TouchMac
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/SuzalShrestha/touchmac/actions/workflows/ci.yml/badge.svg)](https://github.com/SuzalShrestha/touchmac/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/SuzalShrestha/touchmac?include_prereleases)](https://github.com/SuzalShrestha/touchmac/releases)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](https://github.com/SuzalShrestha/touchmac)
 [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-lightgrey)](https://github.com/SuzalShrestha/touchmac)
@@ -8,6 +9,11 @@
 **Tap the table beside your MacBook — the desk becomes shortcut buttons.**
 
 Website: **[suzalshrestha.github.io/touchmac](https://suzalshrestha.github.io/touchmac/)**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screens/desk-dark.jpg">
+  <img alt="The Desk page: a rendered MacBook on a wooden desk with six glowing tap zones, and a key for each zone below" src="docs/screens/desk-light.jpg">
+</picture>
 
 TouchMac turns the empty desk space around your MacBook into six configurable
 tap zones: two on the left, two on the right, two in front. Tap a spot on the
@@ -41,6 +47,26 @@ unzipping, clear quarantine once:
 xattr -cr ~/Downloads/TouchMac.app
 open ~/Downloads/TouchMac.app
 ```
+
+## Updates
+
+From 0.2.0, TouchMac updates itself. Each release on GitHub carries a signed
+update feed (`appcast.xml`). TouchMac checks it once a day, shows what is new, and
+installs the update when you agree. It installs an update only if the update's
+EdDSA signature matches the key built into the app.
+
+- **Settings → Updates**: turn automatic checks or automatic installs on or off,
+  or click **Check Now**. The app menu has **Check for Updates…** too.
+- When TouchMac sits in the menu bar, a found update shows as a badge in the menu
+  bar panel; it does not interrupt you.
+- **From 0.1.0**: 0.1.0 has no updater. Download 0.2.0 once by hand; later
+  versions arrive in the app.
+- An update check sends GitHub your IP address and the app version, as any
+  download does. Nothing else leaves your Mac.
+- Builds from source have no update key and do not update themselves.
+
+What changed in each version: [CHANGELOG.md](CHANGELOG.md) and the
+[releases page](https://github.com/SuzalShrestha/touchmac/releases).
 
 ## Requirements
 
@@ -77,14 +103,14 @@ do. TouchMac lives in the menu bar; closing the window keeps it running.
 
 ## Features
 
-| | |
-|---|---|
-| **Actions** | Open app · open website · run a Shortcuts shortcut · screenshot · volume up/down/mute · play/pause, next, previous · Mission Control · sleep display · any shell command (runs in your login shell, so Homebrew tools work) |
-| **Gestures** | Single and double tap per zone: up to 12 buttons. A zone without a double-tap action fires instantly. |
-| **Calibration quality** | Leave-one-out accuracy per zone and overall, with the zone each one is mistaken for. Stray taps (a keystroke during calibration) are dropped automatically. |
-| **Robust detection** | Threshold rises in noisy conditions; taps while you type or click are ignored; desk ringing never fires twice. |
-| **Feedback** | Live signal meter with the current threshold, activity log with every action, unmatched tap and error (missing permission, app not found, failing command). |
-| **App** | Onboarding, Sensitivity page (tap strength, matching tolerance), menu-bar mode, launch at login, test mode, single-instance guard. |
+|                         |                                                                                                                                                                                                                             |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Actions**             | Open app · open website · run a Shortcuts shortcut · screenshot · volume up/down/mute · play/pause, next, previous · Mission Control · sleep display · any shell command (runs in your login shell, so Homebrew tools work) |
+| **Gestures**            | Single and double tap per zone: up to 12 buttons. A zone without a double-tap action fires instantly.                                                                                                                       |
+| **Calibration quality** | Leave-one-out accuracy per zone and overall, with the zone each one is mistaken for. Stray taps (a keystroke during calibration) are dropped automatically.                                                                 |
+| **Robust detection**    | Threshold rises in noisy conditions; taps while you type or click are ignored; desk ringing never fires twice.                                                                                                              |
+| **Feedback**            | Live signal meter with the current threshold, activity log with every action, unmatched tap and error (missing permission, app not found, failing command).                                                                 |
+| **App**                 | Onboarding, Sensitivity page (tap strength, matching tolerance), menu-bar mode, launch at login, test mode, single-instance guard.                                                                                          |
 
 ## How it works
 
@@ -115,7 +141,7 @@ Prior art: the [Knock](https://www.producthunt.com/products/knock-7) app,
 └────────────────────────────────────┘        └──────────────────────────────────┘
 ```
 
-- **`touchmacd`** only *emits* sensor data; it never executes anything.
+- **`touchmacd`** only _emits_ sensor data; it never executes anything.
   Actions run inside the user-level app.
 - **The channel is authenticated both ways.** The helper streams over a Unix
   socket at `/var/run/com.sujal.touchmacd.sock`. Only root can create files
@@ -164,12 +190,12 @@ hand-editable. Missing keys take their defaults and an unknown action becomes
 calibration. An unreadable file is moved aside as `config.broken-<date>.json`
 and the app tells you; it is never overwritten.
 
-| Key                 | Default | Meaning |
-|---------------------|---------|---------|
-| `thresholdG`        | `0.04`  | Minimum onset threshold in g ("Tap strength"). |
-| `adaptiveThreshold` | `true`  | Raise the threshold while background vibration is high. |
-| `ignoreWhileTyping` | `true`  | Ignore taps right after a keystroke or click. |
-| `maxDistance`       | `6.0`   | k-NN rejection distance in z-score units ("Tolerance"). |
+| Key                 | Default | Meaning                                                      |
+| ------------------- | ------- | ------------------------------------------------------------ |
+| `thresholdG`        | `0.04`  | Minimum onset threshold in g ("Tap strength").               |
+| `adaptiveThreshold` | `true`  | Raise the threshold while background vibration is high.      |
+| `ignoreWhileTyping` | `true`  | Ignore taps right after a keystroke or click.                |
+| `maxDistance`       | `6.0`   | k-NN rejection distance in z-score units ("Tolerance").      |
 | `zones`             | —       | Per zone: `id`, `name`, `action`, `doubleAction`, `samples`. |
 
 Actions are tagged JSON, e.g. `{"openApp":{"_0":"/Applications/Safari.app"}}`,
@@ -195,11 +221,16 @@ touchmac/
 │       └── TouchMac/             # SwiftUI app
 │           ├── AppState.swift    #   sensor → engine → classifier → gestures → actions
 │           ├── Helper.swift      #   LaunchDaemon install / update / uninstall
+│           ├── Updater.swift     #   Sparkle in-app updates
+│           ├── Snapshot.swift    #   --snapshot <dir>: every screen to PNG, demo data
 │           ├── SensorClient.swift, ActionRunner.swift, TouchMacApp.swift
+│           ├── Design/           #   tokens, SceneKit desk render, isometric drawings
 │           └── Views/            #   Desk, Sensitivity, Activity, Settings,
 │                                 #   Onboarding, zone editor, calibration
-├── docs/                         # product website (GitHub Pages)
-├── .github/workflows/ci.yml      # build + self-test on every push
+├── docs/                         # product website (GitHub Pages), screens/
+├── scripts/                      # update signing setup, appcast writer
+├── .github/workflows/            # ci (lint, test, build), release, PR title
+├── package.json                  # lint and format tools, git hooks
 ├── touchmac.py, test_touchmac.py # earlier Python CLI prototype + its tests
 └── README.md
 ```
@@ -238,14 +269,14 @@ Try Restart Helper, then Reinstall Helper.
 
 **Taps detected but wrong zone** — check the accuracy badges on the Desk page.
 Recalibrate the zones that are mixed up, with more distance between the spots
-and a steady tap strength. Lower *Tolerance* to ignore unclear taps instead of
+and a steady tap strength. Lower _Tolerance_ to ignore unclear taps instead of
 guessing.
 
-**Typing or the trackpad triggers taps** — keep *Ignore taps while typing or
-clicking* on, and raise *Tap strength*.
+**Typing or the trackpad triggers taps** — keep _Ignore taps while typing or
+clicking_ on, and raise _Tap strength_.
 
 **Nothing detected** — watch the live signal on the Sensitivity page while you
-tap. If the bars stay under the orange line, lower *Tap strength*.
+tap. If the bars stay under the orange line, lower _Tap strength_.
 
 **An action does nothing** — the Activity page shows why (for example a
 missing permission or an app that moved).
@@ -266,13 +297,17 @@ and `~/Library/Application Support/TouchMac`.
 - Prototype-grade zone separation: left/right/front split reliably by
   direction; near/far on the same side rides on tap intensity, which is
   noisier. The calibration score tells you how well it works on your desk.
-- The `.app` is ad-hoc signed, not notarized. macOS ties privacy permissions
+- The `.app` is ad-hoc signed, not notarized. The first download needs
+  `xattr -cr`. macOS ties privacy permissions
   to the signature, so after rebuilding you may need to grant them again.
 - Media keys use a synthesized system event and need Accessibility permission.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the commit convention and how
+releases work. Please follow the [code of conduct](CODE_OF_CONDUCT.md).
+Security reports: [SECURITY.md](SECURITY.md). Does TouchMac work on your Mac?
+[Send a hardware report](https://github.com/SuzalShrestha/touchmac/issues/new?template=hardware.yml).
 
 ## License
 
