@@ -1,0 +1,14 @@
+name: Feature request
+description: Suggest a new action, gesture or improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: Describe the task, not the solution. For example "mute my microphone in calls".
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could TouchMac help?

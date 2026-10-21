@@ -13,9 +13,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.2.0</string>
+    <string>0.2.0</string> <!-- x-release-please-version -->
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>0.2.0</string> <!-- x-release-please-version -->
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>CFBundleIconFile</key>
@@ -24,6 +24,13 @@
     <string>public.app-category.utilities</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <!-- Updates: Sparkle reads the feed from the latest GitHub release and installs an update
+         only if its EdDSA signature matches this key. Empty key = this build does not update itself.
+         Set it once with scripts/setup-update-signing.sh. -->
+    <key>SUFeedURL</key>
+    <string>https://github.com/SuzalShrestha/touchmac/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>topfNvobrKeB38w2T7+8P4R/CEXwkXwC9OIIeW0fSzM=</string>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Sujal Shrestha</string>
 </dict>

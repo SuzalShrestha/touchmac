@@ -14,8 +14,8 @@ final class SensorClient {
     // all below: `queue` only
     private var fd: Int32 = -1
     private var source: DispatchSourceRead?
-    private var carry: [UInt8] = []   // bytes of a record split across reads
-    private var lastPacket = 0.0      // systemUptime
+    private var carry: [UInt8] = []  // bytes of a record split across reads
+    private var lastPacket = 0.0  // systemUptime
 
     /// Connects if not connected. Cheap; call about once a second.
     func connectIfNeeded() {
@@ -30,9 +30,10 @@ final class SensorClient {
                     dst.copyMemory(from: UnsafeRawBufferPointer(rebasing: $0.prefix(dst.count - 1)))
                 }
             }
-            let ok = withUnsafePointer(to: &addr) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(s, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
-            } == 0
+            let ok =
+                withUnsafePointer(to: &addr) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(s, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+                } == 0
             var uid: uid_t = 1, gid: gid_t = 0
             guard ok, getpeereid(s, &uid, &gid) == 0, uid == 0 else {
                 close(s)
@@ -88,9 +89,11 @@ final class SensorClient {
         defer { IOObjectRelease(it) }
         var found = false
         while case let svc = IOIteratorNext(it), svc != 0 {
-            let page = IORegistryEntryCreateCFProperty(svc, "PrimaryUsagePage" as CFString, kCFAllocatorDefault, 0)?
+            let page =
+                IORegistryEntryCreateCFProperty(svc, "PrimaryUsagePage" as CFString, kCFAllocatorDefault, 0)?
                 .takeRetainedValue() as? Int
-            let usage = IORegistryEntryCreateCFProperty(svc, "PrimaryUsage" as CFString, kCFAllocatorDefault, 0)?
+            let usage =
+                IORegistryEntryCreateCFProperty(svc, "PrimaryUsage" as CFString, kCFAllocatorDefault, 0)?
                 .takeRetainedValue() as? Int
             if page == 0xFF00 && usage == 3 { found = true }
             IOObjectRelease(svc)

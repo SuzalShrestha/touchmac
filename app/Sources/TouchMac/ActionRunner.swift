@@ -5,7 +5,7 @@ import TouchMacCore
 
 /// macOS privacy permissions some actions need.
 enum Permission: CaseIterable, Identifiable {
-    case accessibility    // posting media-key events
+    case accessibility  // posting media-key events
     case screenRecording  // screenshots
 
     var id: Self { self }
@@ -85,16 +85,18 @@ enum ActionRunner {
         case .mute:
             appleScript("set volume output muted (not (output muted of (get volume settings)))", done: done)
         case .playPause:
-            postMediaKey(16, done: done)   // NX_KEYTYPE_PLAY
+            postMediaKey(16, done: done)  // NX_KEYTYPE_PLAY
         case .nextTrack:
-            postMediaKey(17, done: done)   // NX_KEYTYPE_NEXT
+            postMediaKey(17, done: done)  // NX_KEYTYPE_NEXT
         case .previousTrack:
-            postMediaKey(18, done: done)   // NX_KEYTYPE_PREVIOUS
+            postMediaKey(18, done: done)  // NX_KEYTYPE_PREVIOUS
         case .screenshot:
             exec("/usr/sbin/screencapture", ["-ic"], done: done)
         case .missionControl:
-            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Mission Control.app"),
-                                               configuration: .init()) { _, error in
+            NSWorkspace.shared.openApplication(
+                at: URL(fileURLWithPath: "/System/Applications/Mission Control.app"),
+                configuration: .init()
+            ) { _, error in
                 DispatchQueue.main.async { done(error?.localizedDescription) }
             }
         case .sleepDisplay:
@@ -144,9 +146,12 @@ enum ActionRunner {
         func post(_ down: Bool) -> Bool {
             let flags = NSEvent.ModifierFlags(rawValue: down ? 0xA00 : 0xB00)
             let data1 = Int((key << 16) | Int32((down ? 0xA : 0xB) << 8))
-            guard let event = NSEvent.otherEvent(with: .systemDefined, location: .zero, modifierFlags: flags,
-                                                 timestamp: 0, windowNumber: 0, context: nil,
-                                                 subtype: 8, data1: data1, data2: -1)?.cgEvent else { return false }
+            guard
+                let event = NSEvent.otherEvent(
+                    with: .systemDefined, location: .zero, modifierFlags: flags,
+                    timestamp: 0, windowNumber: 0, context: nil,
+                    subtype: 8, data1: data1, data2: -1)?.cgEvent
+            else { return false }
             event.post(tap: .cghidEventTap)
             return true
         }

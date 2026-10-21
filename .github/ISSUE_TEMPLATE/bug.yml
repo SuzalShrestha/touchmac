@@ -1,0 +1,29 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: TouchMac version
+      description: Settings → About.
+      placeholder: "0.2.0"
+    validations: { required: true }
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS
+      placeholder: MacBook Pro 14-inch M3 Pro, macOS 15.5
+    validations: { required: true }
+  - type: textarea
+    id: log
+    attributes:
+      label: Helper log
+      description: Settings → Sensor → Show Log. Paste the last lines.
+      render: text

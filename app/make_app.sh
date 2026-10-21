@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build TouchMac.app (release) with the root helper bundled next to the app binary.
+# Build TouchMac.app (release): the app, the root helper next to its binary, and Sparkle.
 set -e
 cd "$(dirname "$0")"
 
@@ -14,10 +14,12 @@ fi
 swift build -c release
 APP=build/TouchMac.app
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp .build/release/TouchMac .build/release/touchmacd "$APP/Contents/MacOS/"
 cp Info.plist "$APP/Contents/"
 cp AppIcon.icns "$APP/Contents/Resources/"
+# ditto keeps the framework's symlinks; Sparkle ships it signed, so it is not re-signed here
+ditto .build/release/Sparkle.framework "$APP/Contents/Frameworks/Sparkle.framework"
 codesign --force -s - "$APP/Contents/MacOS/touchmacd"
 codesign --force -s - "$APP"
 codesign --verify --strict "$APP"

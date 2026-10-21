@@ -1,0 +1,40 @@
+name: Hardware report
+description: Tell us if TouchMac works on your Mac. This fills the compatibility list.
+labels: [hardware]
+body:
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      placeholder: MacBook Air 13-inch M2
+    validations: { required: true }
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+    validations: { required: true }
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Works well
+        - Works, but zones get mixed up
+        - Sensor found, but no taps detected
+        - Sensor not found
+    validations: { required: true }
+  - type: input
+    id: sensor
+    attributes:
+      label: Sensor check
+      description: Output of `ioreg -c AppleSPUHIDDevice -r -d1 | grep -c PrimaryUsage`
+  - type: input
+    id: accuracy
+    attributes:
+      label: Calibration accuracy
+      description: The percentage on the Desk page after calibration.
+  - type: input
+    id: desk
+    attributes:
+      label: Desk surface
+      placeholder: Solid oak, glass, laminate…

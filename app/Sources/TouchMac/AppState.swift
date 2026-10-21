@@ -14,13 +14,14 @@ struct TapEvent: Identifiable {
     let date = Date()
     let kind: Kind
     let text: String
+    var zoneID: String?
 }
 
 struct CalibrationResult {
     let zoneID: String
     let kept: Int
     let dropped: Int
-    let accuracy: Double?      // this zone's leave-one-out score; nil while it is the only calibrated zone
+    let accuracy: Double?  // this zone's leave-one-out score; nil while it is the only calibrated zone
     let confusedWith: String?  // name of the zone its taps are mistaken for
 }
 
@@ -31,7 +32,7 @@ final class SignalHistory {
     private(set) var threshold = 0.04
     private(set) var noiseFloor = 0.0
 
-    fileprivate func push(_ v: Double, threshold: Double, noise: Double) {
+    func push(_ v: Double, threshold: Double, noise: Double) {
         values.removeFirst()
         values.append(v)
         self.threshold = threshold
@@ -61,7 +62,7 @@ final class AppState {
     var calibrationTaps = 0
     var calibrationResult: CalibrationResult?
     var calibrationQueue: [String] = []
-    var calibrationIndex = 0   // 1-based position in the current run
+    var calibrationIndex = 0  // 1-based position in the current run
     var calibrationCount = 0
     let calibrationTarget = 10
 
@@ -103,6 +104,7 @@ final class AppState {
     }
 
     private func tick() {
+        guard Snapshot.directory == nil else { return }  // never take the sensor from the running app
         client.connectIfNeeded()
         sensorAlive = client.isAlive
         if !sensorAlive { helperStatus = Helper.status }
@@ -132,6 +134,7 @@ final class AppState {
         if config.maxDistance != old.maxDistance || config.zones.map(\.samples) != old.zones.map(\.samples) {
             quality = Self.makeQuality(config)
         }
+        guard Snapshot.directory == nil else { return }  // demo data must not reach the real settings file
         // debounce: a slider drag changes the config dozens of times a second
         saveWork?.cancel()
         let snapshot = config
@@ -155,7 +158,7 @@ final class AppState {
     /// Latest peak and threshold into the meter history, at most 25 times a second.
     func pollSignal() {
         let now = ProcessInfo.processInfo.systemUptime
-        guard now - lastPoll > 0.04 else { return }
+        guard now - lastPoll > 0.04, Snapshot.directory == nil else { return }
         lastPoll = now
         let (peak, threshold, noise) = client.queue.sync { (engine.readPeak(), engine.effectiveThreshold, engine.noiseFloor) }
         signal.push(peak, threshold: threshold, noise: noise)
@@ -205,16 +208,20 @@ final class AppState {
             case .double(let id): z = zone(id); action = z.doubleAction; name = "\(z.name) ×2"
             }
             if testMode {
-                log(.action, "\(name) → \(action.label)  (test mode)")
+                log(.action, "\(name) → \(action.label)  (test mode)", zone: z.id)
             } else {
-                run(action, from: name)
+                run(action, from: name, zone: z.id)
             }
         }
     }
 
-    func run(_ action: TapAction, from name: String) {
+    func run(_ action: TapAction, from name: String, zone: String? = nil) {
         ActionRunner.run(action) { [weak self] error in
-            if let error { self?.log(.error, "\(name): \(error)") } else { self?.log(.action, "\(name) → \(action.label)") }
+            if let error {
+                self?.log(.error, "\(name): \(error)", zone: zone)
+            } else {
+                self?.log(.action, "\(name) → \(action.label)", zone: zone)
+            }
         }
     }
 
@@ -225,8 +232,8 @@ final class AppState {
         }
     }
 
-    func log(_ kind: TapEvent.Kind, _ text: String) {
-        events.insert(TapEvent(kind: kind, text: text), at: 0)
+    func log(_ kind: TapEvent.Kind, _ text: String, zone: String? = nil) {
+        events.insert(TapEvent(kind: kind, text: text, zoneID: zone), at: 0)
         if events.count > 100 { events.removeLast() }
     }
 

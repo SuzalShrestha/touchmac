@@ -1,0 +1,65 @@
+name: Release
+
+# release-please keeps a "chore: release x.y.z" PR open with the changelog of every
+# conventional commit since the last release. Merging it tags the release; the build job
+# then attaches the app and the signed update feed that installed copies read.
+on:
+  push:
+    branches: [main]
+
+permissions: {} # each job asks for what it needs
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # tags and releases
+      pull-requests: write # the release PR
+    outputs:
+      created: ${{ steps.rp.outputs.release_created }}
+      tag: ${{ steps.rp.outputs.tag_name }}
+      version: ${{ steps.rp.outputs.version }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+
+  build:
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: macos-15
+    permissions:
+      contents: write # upload to the release
+    env:
+      VERSION: ${{ needs.release-please.outputs.version }}
+      TAG: ${{ needs.release-please.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - name: Self-test
+        working-directory: app
+        run: swift build -c release --product selftest && "$(swift build -c release --show-bin-path)/selftest" # not swift run, see ci.yml
+      - name: Build app
+        run: sh app/make_app.sh
+      - name: Zip
+        run: ditto -c -k --keepParent app/build/TouchMac.app "TouchMac-$VERSION-macos.zip"
+      - name: Release notes as HTML
+        run: |
+          gh release view "$TAG" --json body -q .body > notes.md
+          gh api markdown -f mode=gfm -f context="$GITHUB_REPOSITORY" -F text=@notes.md > notes.html
+      - name: Signed update feed
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::warning::SPARKLE_PRIVATE_KEY is not set: no appcast.xml, installed copies will not see this release"
+          else
+            sh scripts/appcast.sh "$VERSION" "TouchMac-$VERSION-macos.zip" notes.html > appcast.xml
+          fi
+      - name: Upload
+        run: |
+          files="TouchMac-$VERSION-macos.zip"
+          [ -f appcast.xml ] && files="$files appcast.xml"
+          # shellcheck disable=SC2086 # two plain file names, split on purpose
+          gh release upload "$TAG" $files

@@ -12,7 +12,7 @@ enum Helper {
 
     enum Status: Equatable {
         case notInstalled
-        case outdated     // the app ships a different helper binary than the installed one
+        case outdated  // the app ships a different helper binary than the installed one
         case installed
     }
 
@@ -34,40 +34,42 @@ enum Helper {
         guard let src = bundledBinary else {
             return done("The helper is missing from the app bundle. Build with make_app.sh.")
         }
-        runAsAdmin("""
-        set -e
-        launchctl bootout system/\(label) 2>/dev/null && sleep 1 || true
-        pkill -x touchmacd 2>/dev/null || true
-        rm -f /var/run/touchmacd.pid
-        mkdir -p /Library/PrivilegedHelperTools
-        install -m 755 -o root -g wheel \(shq(src)) \(installedBinary)
-        cat > \(plistPath) <<'PLIST'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>Label</key><string>\(label)</string>
-            <key>ProgramArguments</key><array><string>\(installedBinary)</string></array>
-            <key>RunAtLoad</key><true/>
-            <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
-            <key>ThrottleInterval</key><integer>5</integer>
-            <key>StandardErrorPath</key><string>\(logPath)</string>
-            <key>StandardOutPath</key><string>\(logPath)</string>
-        </dict>
-        </plist>
-        PLIST
-        chown root:wheel \(plistPath)
-        chmod 644 \(plistPath)
-        launchctl bootstrap system \(plistPath)
-        """, done: done)
+        runAsAdmin(
+            """
+            set -e
+            launchctl bootout system/\(label) 2>/dev/null && sleep 1 || true
+            pkill -x touchmacd 2>/dev/null || true
+            rm -f /var/run/touchmacd.pid
+            mkdir -p /Library/PrivilegedHelperTools
+            install -m 755 -o root -g wheel \(shq(src)) \(installedBinary)
+            cat > \(plistPath) <<'PLIST'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>Label</key><string>\(label)</string>
+                <key>ProgramArguments</key><array><string>\(installedBinary)</string></array>
+                <key>RunAtLoad</key><true/>
+                <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+                <key>ThrottleInterval</key><integer>5</integer>
+                <key>StandardErrorPath</key><string>\(logPath)</string>
+                <key>StandardOutPath</key><string>\(logPath)</string>
+            </dict>
+            </plist>
+            PLIST
+            chown root:wheel \(plistPath)
+            chmod 644 \(plistPath)
+            launchctl bootstrap system \(plistPath)
+            """, done: done)
     }
 
     static func uninstall(done: @escaping (String?) -> Void) {
-        runAsAdmin("""
-        launchctl bootout system/\(label) 2>/dev/null || true
-        pkill -x touchmacd 2>/dev/null || true
-        rm -f \(plistPath) \(installedBinary) /var/run/touchmacd.pid \(SensorWire.socketPath)
-        """, done: done)
+        runAsAdmin(
+            """
+            launchctl bootout system/\(label) 2>/dev/null || true
+            pkill -x touchmacd 2>/dev/null || true
+            rm -f \(plistPath) \(installedBinary) /var/run/touchmacd.pid \(SensorWire.socketPath)
+            """, done: done)
     }
 
     static func restart(done: @escaping (String?) -> Void) {
@@ -83,8 +85,10 @@ enum Helper {
     private static func runAsAdmin(_ script: String, done: @escaping (String?) -> Void) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        p.arguments = ["-e", "on run argv", "-e", "do shell script (item 1 of argv) with administrator privileges",
-                       "-e", "end run", script]
+        p.arguments = [
+            "-e", "on run argv", "-e", "do shell script (item 1 of argv) with administrator privileges",
+            "-e", "end run", script,
+        ]
         let err = Pipe()
         p.standardError = err
         p.standardOutput = FileHandle.nullDevice
