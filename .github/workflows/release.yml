@@ -34,7 +34,7 @@ jobs:
       TAG: ${{ needs.release-please.outputs.tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.tag }}
       - name: Self-test
