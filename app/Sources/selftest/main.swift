@@ -108,14 +108,18 @@ run("classifier_synthetic") {
 
 run("real_taps_m1pro") {
     guard let r = Classifier.crossValidate(fixtureM1Pro, maxDistance: 6.0) else { return check(false, "no report") }
-    print(String(format: "   leave-one-out accuracy %.0f%%, worst zone %@", r.accuracy * 100,
-                 r.perZone.min { $0.value < $1.value }.map { "\($0.key) \(Int($0.value * 100))%" } ?? "-"))
+    print(
+        String(
+            format: "   leave-one-out accuracy %.0f%%, worst zone %@", r.accuracy * 100,
+            r.perZone.min { $0.value < $1.value }.map { "\($0.key) \(Int($0.value * 100))%" } ?? "-"))
     check(r.accuracy >= 0.80, "accuracy regressed below the v0.1.0 baseline: \(r.accuracy)")
     check(r.confusedWith["R2"] == "F2", "known confusion R2->F2 not reported: \(r.confusedWith)")
     let pruned = fixtureM1Pro.mapValues { Classifier.pruneOutliers($0) }
     let rp = Classifier.crossValidate(pruned, maxDistance: 6.0)!
-    print(String(format: "   after outlier pruning %.0f%% (%d of 60 taps kept)", rp.accuracy * 100,
-                 pruned.values.reduce(0) { $0 + $1.count }))
+    print(
+        String(
+            format: "   after outlier pruning %.0f%% (%d of 60 taps kept)", rp.accuracy * 100,
+            pruned.values.reduce(0) { $0 + $1.count }))
     check(rp.accuracy >= r.accuracy, "pruning made real data worse")
 }
 
@@ -149,10 +153,10 @@ run("config_compat") {
 
     // v0.1.0 file: no adaptive/typing/doubleAction keys, one action from a future version
     let old = """
-    {"thresholdG":0.05,"maxDistance":5,"zones":[
-      {"id":"L1","name":"Left Near","action":{"openApp":{"_0":"/Applications/Safari.app"}},"samples":[[1,0,0,0,0,0,-1]]},
-      {"id":"R1","name":"Right Near","action":{"teleport":{}},"samples":[[0,1,0,0,0,0,-1]]}]}
-    """
+        {"thresholdG":0.05,"maxDistance":5,"zones":[
+          {"id":"L1","name":"Left Near","action":{"openApp":{"_0":"/Applications/Safari.app"}},"samples":[[1,0,0,0,0,0,-1]]},
+          {"id":"R1","name":"Right Near","action":{"teleport":{}},"samples":[[0,1,0,0,0,0,-1]]}]}
+        """
     try! old.write(to: url, atomically: true, encoding: .utf8)
     let (cfg, warning) = AppConfig.load(from: url)
     check(warning == nil, "old file should load cleanly")
@@ -198,8 +202,9 @@ run("sensor_wire") {
     buf.withUnsafeBytes { SensorWire.decode($0, count: buf.count, now: 100) { got.append(($0, $1, $2, $3, $4)) } }
     check(got.count == 3, "batch size: \(got.count)")
     for (s, g) in zip(sent, got) {
-        check(s.0 == g.0 && abs(100 - s.1 - g.1) < 1e-6 && abs(s.2 - g.2) < 1e-6 && abs(s.3 - g.3) < 1e-6 && abs(s.4 - g.4) < 1e-6,
-              "round trip mismatch: \(s) vs \(g)")
+        check(
+            s.0 == g.0 && abs(100 - s.1 - g.1) < 1e-6 && abs(s.2 - g.2) < 1e-6 && abs(s.3 - g.3) < 1e-6 && abs(s.4 - g.4) < 1e-6,
+            "round trip mismatch: \(s) vs \(g)")
     }
     check(got[0].1 < got[1].1 && got[1].1 < got[2].1, "older samples must get earlier times")
     // a stream read can end mid-record: only whole records are decoded

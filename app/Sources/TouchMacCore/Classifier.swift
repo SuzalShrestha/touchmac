@@ -40,7 +40,8 @@ public struct Classifier {
             return s.squareRoot()
         }
 
-        let top = labeled
+        let top =
+            labeled
             .map { (zone: $0.zone, d: dist(feature, $0.s)) }
             .sorted { $0.d < $1.d }
             .prefix(3)
@@ -50,9 +51,11 @@ public struct Classifier {
             let v = votes[n.zone] ?? (0, n.d)
             votes[n.zone] = (v.n + 1, min(v.nearest, n.d))
         }
-        guard let winner = votes.max(by: { a, b in
-            a.value.n != b.value.n ? a.value.n < b.value.n : a.value.nearest > b.value.nearest
-        })?.key else { return nil }
+        guard
+            let winner = votes.max(by: { a, b in
+                a.value.n != b.value.n ? a.value.n < b.value.n : a.value.nearest > b.value.nearest
+            })?.key
+        else { return nil }
         let winnerDists = top.filter { $0.zone == winner }.map(\.d)
         let score = winnerDists.reduce(0, +) / Double(winnerDists.count)
         return score <= maxDistance ? Match(zone: winner, distance: score) : nil

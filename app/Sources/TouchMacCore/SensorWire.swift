@@ -7,8 +7,10 @@ public enum SensorWire {
     public static let socketPath = "/var/run/com.sujal.touchmacd.sock"
     public static let recordLen = 17
 
-    public static func write(kind: UInt8, x: Double, y: Double, z: Double,
-                             into raw: UnsafeMutableRawBufferPointer, at o: Int) {
+    public static func write(
+        kind: UInt8, x: Double, y: Double, z: Double,
+        into raw: UnsafeMutableRawBufferPointer, at o: Int
+    ) {
         raw[o] = kind
         raw.storeBytes(of: Float32(x).bitPattern.littleEndian, toByteOffset: o + 1, as: UInt32.self)
         raw.storeBytes(of: Float32(y).bitPattern.littleEndian, toByteOffset: o + 5, as: UInt32.self)
@@ -20,8 +22,10 @@ public enum SensorWire {
     }
 
     /// Calls `sample(kind, t, x, y, z)` for each whole record in the first `n` bytes.
-    public static func decode(_ raw: UnsafeRawBufferPointer, count n: Int, now: Double,
-                              _ sample: (UInt8, Double, Double, Double, Double) -> Void) {
+    public static func decode(
+        _ raw: UnsafeRawBufferPointer, count n: Int, now: Double,
+        _ sample: (UInt8, Double, Double, Double, Double) -> Void
+    ) {
         func f(_ off: Int) -> Double {
             Double(Float32(bitPattern: UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: off, as: UInt32.self))))
         }

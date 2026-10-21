@@ -23,23 +23,26 @@ from pathlib import Path
 
 # ---------------------------------------------------------------- config
 
+
 def real_user():
     return os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
 
 
 def config_path():
     home = Path(pwd.getpwnam(real_user()).pw_dir)
-    return Path(os.environ.get("TOUCHMAC_CONFIG", home / ".config/touchmac/config.json"))
+    return Path(
+        os.environ.get("TOUCHMAC_CONFIG", home / ".config/touchmac/config.json")
+    )
 
 
 DEFAULT_CONFIG = {
     "sample_rate": 400,
-    "threshold_g": 0.04,        # onset threshold on gravity-removed accel magnitude
-    "window_ms": 60,            # feature window after onset
-    "refractory_ms": 150,       # ignore new onsets this long after one fires
-    "multi_tap_gap_ms": 400,    # max gap between taps of one group
-    "min_similarity": 0.5,      # cosine sim below this = not a real tap, ignore
-    "zones": {},                # filled by calibrate: {"left": [6 floats], "right": [...]}
+    "threshold_g": 0.04,  # onset threshold on gravity-removed accel magnitude
+    "window_ms": 60,  # feature window after onset
+    "refractory_ms": 150,  # ignore new onsets this long after one fires
+    "multi_tap_gap_ms": 400,  # max gap between taps of one group
+    "min_similarity": 0.5,  # cosine sim below this = not a real tap, ignore
+    "zones": {},  # filled by calibrate: {"left": [6 floats], "right": [...]}
     "actions": {
         "left.1": "open -a Safari",
         "left.2": "osascript -e 'set volume output volume ((output volume of (get volume settings)) - 10)'",
@@ -74,6 +77,7 @@ def save_config(cfg):
 
 # ---------------------------------------------------------------- detector
 
+
 class TapDetector:
     """Feed accel/gyro samples in; get (zone, tap_count) groups out.
 
@@ -89,14 +93,14 @@ class TapDetector:
         self.gap_n = int(cfg["multi_tap_gap_ms"] / 1000 * self.rate)
         self.min_sim = cfg["min_similarity"]
         self.zones = {z: v for z, v in cfg["zones"].items()}
-        self.on_group = on_group          # callback(zone, count)
-        self.on_tap = None                # optional callback(feature) per raw tap
+        self.on_group = on_group  # callback(zone, count)
+        self.on_tap = None  # optional callback(feature) per raw tap
 
-        self.g_ema = None                 # gravity estimate per axis
-        self.n = 0                        # accel sample counter
-        self.last_onset = -10**9
-        self.collecting = 0               # samples left in feature window
-        self.feat = [0.0] * 6             # [ax,ay,az] impulse + [gx,gy,gz] impulse
+        self.g_ema = None  # gravity estimate per axis
+        self.n = 0  # accel sample counter
+        self.last_onset = -(10**9)
+        self.collecting = 0  # samples left in feature window
+        self.feat = [0.0] * 6  # [ax,ay,az] impulse + [gx,gy,gz] impulse
         self.gyro_collecting = 0
         # pending tap group
         self.group_zone = None
@@ -182,6 +186,7 @@ class TapDetector:
 
 # ---------------------------------------------------------------- IMU loop
 
+
 def imu_loop(cfg, detector, monitor=False):
     try:
         from macimu import IMU
@@ -210,6 +215,7 @@ def imu_loop(cfg, detector, monitor=False):
 
 # ---------------------------------------------------------------- commands
 
+
 def run_action(cfg, zone, count):
     key = f"{zone}.{count}"
     cmd = cfg["actions"].get(key)
@@ -223,13 +229,19 @@ def run_action(cfg, zone, count):
     # run as the logged-in user, not root, so `open` etc. hit their session
     subprocess.Popen(
         ["sudo", "-u", user, "/bin/sh", "-c", cmd],
-        env={"HOME": home, "USER": user, "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"},
+        env={
+            "HOME": home,
+            "USER": user,
+            "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+        },
     )
 
 
 def cmd_run(cfg):
     if not cfg["zones"]:
-        print("warning: not calibrated — all taps map to zone 'any'. Run calibrate first.")
+        print(
+            "warning: not calibrated — all taps map to zone 'any'. Run calibrate first."
+        )
     det = TapDetector(cfg, lambda z, c: run_action(cfg, z, c))
     imu_loop(cfg, det)
 
@@ -245,13 +257,19 @@ def cmd_calibrate(cfg):
     collected = {}
 
     for zone in ("left", "right"):
-        input(f"\nCalibrating '{zone}': tap the table on the {zone.upper()} side "
-              f"{per_zone} times, ~1s apart. Press enter to start...")
+        input(
+            f"\nCalibrating '{zone}': tap the table on the {zone.upper()} side "
+            f"{per_zone} times, ~1s apart. Press enter to start..."
+        )
         feats = []
         det = TapDetector({**cfg, "zones": {}}, lambda z, c: None)
-        det.on_tap = lambda f, fs=feats: (fs.append(f), print(f"  tap {len(fs)}/{per_zone}"))
+        det.on_tap = lambda f, fs=feats: (
+            fs.append(f),
+            print(f"  tap {len(fs)}/{per_zone}"),
+        )
         try:
             from macimu import IMU
+
             with IMU(accel=True, gyro=True, sample_rate=cfg["sample_rate"]) as imu:
                 while len(feats) < per_zone:
                     for s in imu.read_accel():
@@ -266,8 +284,10 @@ def cmd_calibrate(cfg):
         collected[zone] = [v / norm for v in centroid]
 
     lsim = sum(a * b for a, b in zip(collected["left"], collected["right"]))
-    print(f"\nleft/right signature similarity: {lsim:.2f} "
-          f"({'good separation' if lsim < 0.7 else 'WEAK — sides may confuse; tap closer to the laptop edges'})")
+    print(
+        f"\nleft/right signature similarity: {lsim:.2f} "
+        f"({'good separation' if lsim < 0.7 else 'WEAK — sides may confuse; tap closer to the laptop edges'})"
+    )
     cfg["zones"] = collected
     save_config(cfg)
     print(f"saved to {config_path()}")

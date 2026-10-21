@@ -27,7 +27,7 @@ let usageGyro = 9
 let reportLen = 22
 let dataOffset = 6
 let scale = 65536.0
-let stallSec = 5.0               // no reports this long: exit, launchd restarts us
+let stallSec = 5.0  // no reports this long: exit, launchd restarts us
 
 func log(_ s: String) {
     let stamp = ISO8601DateFormatter().string(from: Date())
@@ -134,8 +134,11 @@ func flush(_ now: Double) {
 // ---- wake the SPU drivers ----
 func wakeSPU() {
     var it: io_iterator_t = 0
-    guard IOServiceGetMatchingServices(kIOMainPortDefault,
-                                       IOServiceMatching("AppleSPUHIDDriver"), &it) == KERN_SUCCESS else { return }
+    guard
+        IOServiceGetMatchingServices(
+            kIOMainPortDefault,
+            IOServiceMatching("AppleSPUHIDDriver"), &it) == KERN_SUCCESS
+    else { return }
     while case let svc = IOIteratorNext(it), svc != 0 {
         for (k, v) in [("SensorPropertyReportingState", 1), ("SensorPropertyPowerState", 1), ("ReportInterval", 1000)] {
             IORegistryEntrySetCFProperty(svc, k as CFString, v as CFNumber)
@@ -158,10 +161,11 @@ func parseAndSend(kind: UInt8, report: UnsafeMutablePointer<UInt8>, length: CFIn
         memcpy(&v, report + off, 4)
         return Int32(littleEndian: v)
     }
-    send(kind: kind,
-         x: Double(i32(dataOffset)) / scale,
-         y: Double(i32(dataOffset + 4)) / scale,
-         z: Double(i32(dataOffset + 8)) / scale)
+    send(
+        kind: kind,
+        x: Double(i32(dataOffset)) / scale,
+        y: Double(i32(dataOffset + 4)) / scale,
+        z: Double(i32(dataOffset + 8)) / scale)
 }
 
 let accelCallback: IOHIDReportCallback = { _, _, _, _, _, report, length in
@@ -177,8 +181,11 @@ var openedDevices: [IOHIDDevice] = []
 /// Returns (devices found, devices opened).
 func openSensors() -> (found: Int, opened: Int) {
     var it: io_iterator_t = 0
-    guard IOServiceGetMatchingServices(kIOMainPortDefault,
-                                       IOServiceMatching("AppleSPUHIDDevice"), &it) == KERN_SUCCESS else { return (0, 0) }
+    guard
+        IOServiceGetMatchingServices(
+            kIOMainPortDefault,
+            IOServiceMatching("AppleSPUHIDDevice"), &it) == KERN_SUCCESS
+    else { return (0, 0) }
     var found = 0, opened = 0
     while case let svc = IOIteratorNext(it), svc != 0 {
         defer { IOObjectRelease(svc) }
@@ -190,7 +197,8 @@ func openSensors() -> (found: Int, opened: Int) {
         guard let cb = callback else { continue }
         found += 1
         guard let device = IOHIDDeviceCreate(kCFAllocatorDefault, svc),
-              IOHIDDeviceOpen(device, 0) == kIOReturnSuccess else {
+            IOHIDDeviceOpen(device, 0) == kIOReturnSuccess
+        else {
             log("open failed for usage \(usage)")
             continue
         }

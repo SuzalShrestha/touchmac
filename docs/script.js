@@ -47,12 +47,8 @@
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
       if (!data || !data.tag_name) return;
-      const asset = (data.assets || []).find((a) =>
-        /\.zip$/i.test(a.name || "")
-      );
-      meta.textContent = asset
-        ? `${data.tag_name} · .zip`
-        : `${data.tag_name}`;
+      const asset = (data.assets || []).find((a) => /\.zip$/i.test(a.name || ""));
+      meta.textContent = asset ? `${data.tag_name} · .zip` : `${data.tag_name}`;
       if (asset && asset.browser_download_url) {
         btn.href = asset.browser_download_url;
       }

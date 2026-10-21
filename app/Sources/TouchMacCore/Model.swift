@@ -2,7 +2,7 @@ import Foundation
 
 public enum TapAction: Codable, Hashable {
     case none
-    case openApp(String)      // full path to .app
+    case openApp(String)  // full path to .app
     case shell(String)
     case volumeUp
     case volumeDown
@@ -10,7 +10,7 @@ public enum TapAction: Codable, Hashable {
     case playPause
     case screenshot
     case openURL(String)
-    case shortcut(String)     // Shortcuts.app shortcut name
+    case shortcut(String)  // Shortcuts.app shortcut name
     case nextTrack
     case previousTrack
     case missionControl
@@ -126,7 +126,7 @@ public struct ZoneConfig: Codable, Identifiable, Hashable {
     public var name: String
     public var action: TapAction = .none
     public var doubleAction: TapAction = .none
-    public var samples: [[Double]] = []   // calibration features
+    public var samples: [[Double]] = []  // calibration features
 
     public var isCalibrated: Bool { samples.count >= 5 }
 
